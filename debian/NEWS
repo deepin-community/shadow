@@ -1,0 +1,5 @@
+shadow (1:4.11.1-deepin) stable; urgency=medium
+
+  * ['Rebuild  against by  current gcc 11.2']
+
+ -- Deepin Packages Builder <packages@deepin.org>  Wed, 10 Aug 2022 22:03:58 +0800
