@@ -139,6 +139,9 @@ static bool
     Dflg = false,		/* set/show new user default values */
     eflg = false,		/* days since 1970-01-01 when account is locked */
     fflg = false,		/* days until account with expired password is locked */
+#ifdef ENABLE_SUBIDS
+    Fflg = false,		/* update /etc/subuid and /etc/subgid even if -r option is given */
+#endif
     gflg = false,		/* primary group ID for new account */
     Gflg = false,		/* secondary group set for new account */
     kflg = false,		/* specify a directory to fill new user directory */
@@ -169,7 +172,7 @@ static bool home_added = false;
 #define E_BAD_ARG	3	/* invalid argument to option */
 #define E_UID_IN_USE	4	/* UID already in use (and no -o) */
 #define E_NOTFOUND	6	/* specified group doesn't exist */
-#define E_NAME_IN_USE	9	/* username already in use */
+#define E_NAME_IN_USE	9	/* username or group name already in use */
 #define E_GRP_UPDATE	10	/* can't update group file */
 #define E_HOMEDIR	12	/* can't create home directory */
 #define E_MAILBOXFILE	13	/* can't create mailbox file */
@@ -899,7 +902,7 @@ static void usage (int status)
 	                  "\n"
 	                  "Options:\n"),
 	                Prog, Prog, Prog);
-	(void) fputs (_("      --badnames                do not check for bad names\n"), usageout);
+	(void) fputs (_("      --badname                 do not check for bad names\n"), usageout);
 	(void) fputs (_("  -b, --base-dir BASE_DIR       base directory for the home directory of the\n"
 	                "                                new account\n"), usageout);
 #ifdef WITH_BTRFS
@@ -910,6 +913,9 @@ static void usage (int status)
 	(void) fputs (_("  -D, --defaults                print or change default useradd configuration\n"), usageout);
 	(void) fputs (_("  -e, --expiredate EXPIRE_DATE  expiration date of the new account\n"), usageout);
 	(void) fputs (_("  -f, --inactive INACTIVE       password inactivity period of the new account\n"), usageout);
+#ifdef ENABLE_SUBIDS
+	(void) fputs (_("  -F, --add-subids-for-system   add entries to sub[ud]id even when adding a system user\n"), usageout);
+#endif
 	(void) fputs (_("  -g, --gid GROUP               name or ID of the primary group of the new\n"
 	                "                                account\n"), usageout);
 	(void) fputs (_("  -G, --groups GROUPS           list of supplementary groups of the new\n"
@@ -1189,12 +1195,15 @@ static void process_flags (int argc, char **argv)
 #ifdef WITH_BTRFS
 			{"btrfs-subvolume-home", no_argument, NULL, 200},
 #endif
-			{"badnames",       no_argument,       NULL, 201},
+			{"badname",        no_argument,       NULL, 201},
 			{"comment",        required_argument, NULL, 'c'},
 			{"home-dir",       required_argument, NULL, 'd'},
 			{"defaults",       no_argument,       NULL, 'D'},
 			{"expiredate",     required_argument, NULL, 'e'},
 			{"inactive",       required_argument, NULL, 'f'},
+#ifdef ENABLE_SUBIDS
+			{"add-subids-for-system", no_argument,NULL, 'F'},
+#endif
 			{"gid",            required_argument, NULL, 'g'},
 			{"groups",         required_argument, NULL, 'G'},
 			{"help",           no_argument,       NULL, 'h'},
@@ -1218,11 +1227,14 @@ static void process_flags (int argc, char **argv)
 			{NULL, 0, NULL, '\0'}
 		};
 		while ((c = getopt_long (argc, argv,
+					 "b:c:d:De:f:g:G:hk:K:lmMNop:rR:P:s:u:U"
 #ifdef WITH_SELINUX
-		                         "b:c:d:De:f:g:G:hk:K:lmMNop:rR:P:s:u:UZ:",
-#else				/* !WITH_SELINUX */
-		                         "b:c:d:De:f:g:G:hk:K:lmMNop:rR:P:s:u:U",
-#endif				/* !WITH_SELINUX */
+		                         "Z:"
+#endif				/* WITH_SELINUX */
+#ifdef ENABLE_SUBIDS
+		                         "F"
+#endif				/* ENABLE_SUBIDS */
+					 "",
 		                         long_options, NULL)) != -1) {
 			switch (c) {
 			case 'b':
@@ -1317,6 +1329,11 @@ static void process_flags (int argc, char **argv)
 				}
 				fflg = true;
 				break;
+#ifdef ENABLE_SUBIDS
+			case 'F':
+				Fflg = true;
+				break;
+#endif
 			case 'g':
 				grp = prefix_getgr_nam_gid (optarg);
 				if (NULL == grp) {
@@ -1979,8 +1996,9 @@ static void faillog_reset (uid_t uid)
 	struct faillog fl;
 	int fd;
 	off_t offset_uid = (off_t) (sizeof fl) * uid;
+	struct stat st;
 
-	if (access (FAILLOG_FILE, F_OK) != 0) {
+	if (stat (FAILLOG_FILE, &st) != 0 || st.st_size <= offset_uid) {
 		return;
 	}
 
@@ -2016,8 +2034,9 @@ static void lastlog_reset (uid_t uid)
 	int fd;
 	off_t offset_uid = (off_t) (sizeof ll) * uid;
 	uid_t max_uid;
+	struct stat st;
 
-	if (access (LASTLOG_FILE, F_OK) != 0) {
+	if (stat (LASTLOG_FILE, &st) != 0 || st.st_size <= offset_uid) {
 		return;
 	}
 
@@ -2353,7 +2372,7 @@ static void create_mail (void)
 		if (NULL == spool) {
 			return;
 		}
-		file = alloca (strlen (prefix) + strlen (spool) + strlen (user_name) + 2);
+		file = alloca (strlen (prefix) + strlen (spool) + strlen (user_name) + 3);
 		if (prefix[0])
 			sprintf (file, "%s/%s/%s", prefix, spool, user_name);
 		else
@@ -2409,11 +2428,9 @@ static void check_uid_range(int rflg, uid_t user_id)
 	uid_t uid_min ;
 	uid_t uid_max ;
 	if (rflg) {
-		uid_min = (uid_t)getdef_ulong("SYS_UID_MIN",101UL);
 		uid_max = (uid_t)getdef_ulong("SYS_UID_MAX",getdef_ulong("UID_MIN",1000UL)-1);
-		if (uid_min <= uid_max) {
-			if (user_id < uid_min || user_id >uid_max)
-				fprintf(stderr, _("%s warning: %s's uid %d outside of the SYS_UID_MIN %d and SYS_UID_MAX %d range.\n"), Prog, user_name, user_id, uid_min, uid_max);
+		if (user_id > uid_max) {
+			fprintf(stderr, _("%s warning: %s's uid %d is greater than SYS_UID_MAX %d\n"), Prog, user_name, user_id, uid_max);
 		}
 	}else{
 		uid_min = (uid_t)getdef_ulong("UID_MIN", 1000UL);
@@ -2486,13 +2503,15 @@ int main (int argc, char **argv)
 	uid_max = (uid_t) getdef_ulong ("UID_MAX", 60000UL);
 	subuid_count = getdef_ulong ("SUB_UID_COUNT", 65536);
 	subgid_count = getdef_ulong ("SUB_GID_COUNT", 65536);
-	is_sub_uid = subuid_count > 0 && sub_uid_file_present () && !rflg &&
+	is_sub_uid = subuid_count > 0 && sub_uid_file_present () &&
+	    (!rflg || Fflg) &&
 	    (!user_id || (user_id <= uid_max && user_id >= uid_min));
-	is_sub_gid = subgid_count > 0 && sub_gid_file_present () && !rflg &&
+	is_sub_gid = subgid_count > 0 && sub_gid_file_present () &&
+	    (!rflg || Fflg) &&
 	    (!user_id || (user_id <= uid_max && user_id >= uid_min));
 #endif				/* ENABLE_SUBIDS */
 
-	if (run_parts ("/etc/shadow-maint/useradd-pre.d", (char*)user_name,
+	if (run_parts ("/etc/shadow-maint/useradd-pre.d", user_name,
 			"useradd")) {
 		exit(1);
 	}
@@ -2715,7 +2734,7 @@ int main (int argc, char **argv)
 		create_mail ();
 	}
 
-	if (run_parts ("/etc/shadow-maint/useradd-post.d", (char*)user_name,
+	if (run_parts ("/etc/shadow-maint/useradd-post.d", user_name,
 			"useradd")) {
 		exit(1);
 	}

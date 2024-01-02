@@ -345,7 +345,6 @@ unsigned long getdef_ulong (const char *item, unsigned long dflt)
 	}
 
 	if (getulong (d->value, &val) == 0) {
-		/* FIXME: we should have a getulong */
 		fprintf (shadow_logfd,
 		         _("configuration error - cannot parse %s value: '%s'"),
 		         item, d->value);
@@ -389,10 +388,7 @@ int putdef_str (const char *name, const char *value)
 		return -1;
 	}
 
-	if (NULL != d->value) {
-		free (d->value);
-	}
-
+	free (d->value);
 	d->value = cp;
 	return 0;
 }

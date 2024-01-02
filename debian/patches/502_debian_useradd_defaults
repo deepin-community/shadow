@@ -26,3 +26,16 @@ Forwarded: not-needed
  static const char *def_log_init = "yes";
  
  static long def_inactive = -1;
+diff --git a/man/useradd.8.xml b/man/useradd.8.xml
+index af02a23f..c7f95b47 100644
+--- a/man/useradd.8.xml
++++ b/man/useradd.8.xml
+@@ -248,7 +248,7 @@
+ 	    command line), useradd will set the primary group of the new
+ 	    user to the value specified by the <option>GROUP</option>
+ 	    variable in <filename>/etc/default/useradd</filename>, or
+-	    1000 by default.
++	    100 by default.
+ 	  </para>
+ 	</listitem>
+       </varlistentry>

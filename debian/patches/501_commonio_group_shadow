@@ -12,7 +12,7 @@ Fixes: #166793
  #include "nscd.h"
  #include "sssd.h"
  #ifdef WITH_TCB
-@@ -978,12 +979,23 @@
+@@ -970,12 +971,23 @@
  			goto fail;
  		}
  	} else {
@@ -49,7 +49,7 @@ Fixes: #166793
  	NULL,			/* head */
 --- a/lib/shadowio.c
 +++ b/lib/shadowio.c
-@@ -82,7 +82,7 @@
+@@ -84,7 +84,7 @@
  #ifdef WITH_SELINUX
  	NULL,			/* scontext */
  #endif				/* WITH_SELINUX */

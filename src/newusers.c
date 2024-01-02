@@ -116,7 +116,7 @@ static void usage (int status)
 	                  "\n"
 	                  "Options:\n"),
 	                Prog);
-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
+	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
 #ifndef USE_PAM
 	(void) fprintf (usageout,
 	                _("  -c, --crypt-method METHOD     the crypt method (one of %s)\n"),
@@ -285,8 +285,7 @@ static int add_group (const char *name, const char *gid, gid_t *ngid, uid_t uid)
 		fprintf (stderr,
 		         _("%s: invalid group name '%s'\n"),
 		         Prog, grent.gr_name);
-		if (grent.gr_name)
-			free (grent.gr_name);
+		free (grent.gr_name);
 		return -1;
 	}
 
@@ -383,7 +382,7 @@ static int add_user (const char *name, uid_t uid, gid_t gid)
 	/* Check if this is a valid user name */
 	if (!is_valid_user_name (name)) {
 		fprintf (stderr,
-		         _("%s: invalid user name '%s'\n"),
+		         _("%s: invalid user name '%s': use --badname to ignore\n"),
 		         Prog, name);
 		return -1;
 	}
@@ -464,7 +463,9 @@ static int add_passwd (struct passwd *pwd, const char *password)
 {
 	const struct spwd *sp;
 	struct spwd spent;
+#ifndef USE_PAM
 	char *cp;
+#endif				/* !USE_PAM */
 
 #ifndef USE_PAM
 	void *crypt_arg = NULL;
@@ -607,11 +608,13 @@ static int add_passwd (struct passwd *pwd, const char *password)
 static void process_flags (int argc, char **argv)
 {
 	int c;
+#ifndef USE_PAM
 #if defined(USE_SHA_CRYPT) || defined(USE_BCRYPT) || defined(USE_YESCRYPT)
         int bad_s;
 #endif				/* USE_SHA_CRYPT || USE_BCRYPT || USE_YESCRYPT */
+#endif 				/* !USE_PAM */
 	static struct option long_options[] = {
-		{"badnames",     no_argument,       NULL, 'b'},
+		{"badname",      no_argument,       NULL, 'b'},
 #ifndef USE_PAM
 		{"crypt-method", required_argument, NULL, 'c'},
 #endif				/* !USE_PAM */

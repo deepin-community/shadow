@@ -8,9 +8,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <lib/prototypes.h>
+#include "run_part.h"
 #include "shadowlog_internal.h"
 
-int run_part (char *script_path, char *name, char *action)
+int run_part (char *script_path, const char *name, const char *action)
 {
 	int pid;
 	int wait_status;
@@ -39,15 +40,15 @@ int run_part (char *script_path, char *name, char *action)
 	return (1);
 }
 
-int run_parts (char *directory, char *name, char *action)
+int run_parts (const char *directory, const char *name, const char *action)
 {
 	struct dirent **namelist;
 	int scanlist;
 	int n;
-	int execute_result;
+	int execute_result = 0;
 
 	scanlist = scandir (directory, &namelist, 0, alphasort);
-	if (scanlist<0) {
+	if (scanlist<=0) {
 		return (0);
 	}
 

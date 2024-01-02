@@ -1,3 +1,101 @@
+2022-11-08  Serge Hallyn <serge@hallyn.com>
+
+	* useradd.8: fix default group ID (Tim Biermann)
+	* Revert drop of subid_init() (Serge Hallyn)
+	* Georgian translation (NorwayFun)
+	* useradd: Avoid taking unneeded space: do not reset non-existent data
+	  in lastlog (David Kalnischkies)
+	* relax username restrictions (Alexander Kanavin)
+	* selinux: check MLS enabled before setting serange (genBTC)
+	* copy_tree: use fchmodat instead of chmod (Samanta Navarro)
+	* copy_tree: don't block on FIFOs (Samanta Navarro)
+	* add shell linter (Jan Macku)
+	* copy_tree: carefully treat permissions (Samanta Navarro)
+	* lib/commonio: make lock failures more detailed (Luca BRUNO)
+	* lib: use strzero and memzero where applicable (Christian Göttsche)
+	* Update Dutch translation (Frans Spiesschaert)
+	* Don't test for NULL before calling free (Alex Colomar)
+	* Use libc MAX() and MIN() (Alejandro Colomar)
+	* chage: Fix regression in print_date (Xiami)
+	* usermod: report error if homedir does not exist (Iker Pedrosa)
+	* libmisc: minimum id check for system accounts (Iker Pedrosa)
+	* fix usermod -rG x y wrongly adding a group (xyz)
+	* man: add missing space in useradd.8.xml (Iker Pedrosa)
+	* lastlog: check for localtime() return value (Iker Pedrosa)
+	* Raise limit for passwd and shadow entry length (Iker Pedrosa)
+	* Remove adduser-old.c (Alejandro Colomar)
+	* useradd: Fix buffer overflow when using a prefix (David Michael)
+	* Don't warn when failed to open /etc/nsswitch.conf (Serge Hallyn)
+
+2022-08-15  Serge Hallyn <serge@hallyn.com>
+
+	* Address CVE-2013-4235 (TOCTTOU when copying directories)
+	  (Christian Göttsche)
+
+2022-08-15  Serge Hallyn <serge@hallyn.com>
+
+	* Fix uk manpages
+
+2022-08-08  Serge Hallyn <serge@hallyn.com>
+
+	* Add absolute path hint to --root (Celeste Liu)
+	* Various cleanups (Christian Göttsche)
+	* Fix Ubuntu release used in CI tests (Jeremy Whiting)
+	* add -F options to useradd (and tests) (Masatake YAMATO)
+	* useradd manpage updates (Masatake YAMATO and Alexander Zhang))
+	* Check for ownerid (not just username) in subid ranges (Iker Pedrosa)
+
+2022-07-04  Serge Hallyn <serge@hallyn.com>
+
+	* Declare file local functions static (Christian Göttsche)
+	* Use strict prototypes (Christian Göttsche)
+	* Do not drop const qualifier for Basename (Christian Göttsche)
+	* Constify various pointers (Christian Göttsche)
+	* Don't return uninitialized memory (Christian Göttsche)
+	* Don't let compiler optimize away memory cleaning (Christian Göttsche)
+	* Remove many obsolete compatibility checks  and defines (Alejandro Colomar)
+	* Modify ID range check in useradd (Iker Pedrosa)
+	* Use "extern "C"" to make libsubid easier to use from C++ (Alois Wohlschlager)
+	* French translation updates (bubu)
+	* Fix s/with-pam/with-libpam/ (serge)
+	* Spanish translation updates (Fernando)
+	* French translation fixes (Balint Reczey)
+	* Default max group name length to 32 (Jami Kettunen)
+	* Fix PAM service files without-selinux (Ali Riza KESKIN)
+	* Improve manpages (Markus Hiereth)
+	  - groupadd, useradd, usermod
+	  - groups and id
+	  - pwck
+	* Add fedora to CI builds (Iker Pedrosa)
+	* Fix condition under which pw_dir check happens (Ed Neville)
+	* logoutd: switch to strncat (Steve Grubb)
+	* AUTHORS: improve markdown output (Iker Pedrosa)
+	* Handle ERANGE errors correctly (Niko)
+	* Check for fopen NULL return (juyin)
+	* Split get_salt() into its own fn juyin)
+	* Get salt before chroot to ensure /dev/urandom. (juyin)
+	* Chpasswd code cleanup (juyin)
+	* Work around git safe.directory enforcement (serge)
+	* Alphabetize order in usermod help (Matheus Marques)
+	* Erase password copy on error branches (Christian Göttsche)
+	* Suggest using --badname if needed (Iker Pedrosa)
+	* Update translation files (Iker Pedrosa)
+	* Correct badnames option to badname (Iker Pedrosa)
+	* configure: replace obsolete autoconf macros (Christian Göttsche)
+	* tests: replace egrep with grep -E (Sam James)
+	* Update Ukrainian translations (Yuri Chornoivan)
+	* Cleanups (Iker Pedrosa)
+	  - Remove redeclared variable
+	  - Remove commented out code and FIXMEs
+	  - Add header guards
+	  - Initialize local variables
+	* CI updates (Iker Pedrosa)
+	  - Create github workflow to install dependencies
+	  - Enable CodeQL
+	  - Update actions version
+	* libmisc: use /dev/urandom as fallback if other methods fail (Xi Ruoyao)
+
+
 2022-01-02  Serge Hallyn <serge@hallyn.com>
 
 	* build: include lib/shadowlog_internal.h in dist tarballs (Sam James)
