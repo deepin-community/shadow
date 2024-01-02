@@ -67,7 +67,7 @@
 /* #define E_BAD_PWFILE	5	   passwd file contains errors */
 #define E_NOTFOUND	6	/* specified user/group doesn't exist */
 #define E_USER_BUSY	8	/* user to modify is logged in */
-#define E_NAME_IN_USE	9	/* username already in use */
+#define E_NAME_IN_USE	9	/* username or group name already in use */
 #define E_GRP_UPDATE	10	/* can't update group file */
 /* #define E_NOSPACE	11	   insufficient space to move home dir */
 #define E_HOMEDIR	12	/* unable to complete home dir move */
@@ -367,7 +367,10 @@ static /*@noreturn@*/void usage (int status)
 	                  "\n"
 	                  "Options:\n"),
 	                Prog);
-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
+	(void) fputs (_("  -a, --append                  append the user to the supplemental GROUPS\n"
+	                "                                mentioned by the -G option without removing\n"
+	                "                                the user from other groups\n"), usageout);
+	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
 	(void) fputs (_("  -c, --comment COMMENT         new value of the GECOS field\n"), usageout);
 	(void) fputs (_("  -d, --home HOME_DIR           new home directory for the user account\n"), usageout);
 	(void) fputs (_("  -e, --expiredate EXPIRE_DATE  set account expiration date to EXPIRE_DATE\n"), usageout);
@@ -375,12 +378,6 @@ static /*@noreturn@*/void usage (int status)
 	                "                                to INACTIVE\n"), usageout);
 	(void) fputs (_("  -g, --gid GROUP               force use GROUP as new primary group\n"), usageout);
 	(void) fputs (_("  -G, --groups GROUPS           new list of supplementary GROUPS\n"), usageout);
-	(void) fputs (_("  -a, --append                  append the user to the supplemental GROUPS\n"
-	                "                                mentioned by the -G option without removing\n"
-	                "                                the user from other groups\n"), usageout);
-	(void) fputs (_("  -r, --remove                  remove the user from only the supplemental GROUPS\n"
-	                "                                mentioned by the -G option without removing\n"
-	                "                                the user from other groups\n"), usageout);
 	(void) fputs (_("  -h, --help                    display this help message and exit\n"), usageout);
 	(void) fputs (_("  -l, --login NEW_LOGIN         new value of the login name\n"), usageout);
 	(void) fputs (_("  -L, --lock                    lock the user account\n"), usageout);
@@ -388,8 +385,11 @@ static /*@noreturn@*/void usage (int status)
 	                "                                new location (use only with -d)\n"), usageout);
 	(void) fputs (_("  -o, --non-unique              allow using duplicate (non-unique) UID\n"), usageout);
 	(void) fputs (_("  -p, --password PASSWORD       use encrypted password for the new password\n"), usageout);
-	(void) fputs (_("  -R, --root CHROOT_DIR         directory to chroot into\n"), usageout);
 	(void) fputs (_("  -P, --prefix PREFIX_DIR       prefix directory where are located the /etc/* files\n"), usageout);
+	(void) fputs (_("  -r, --remove                  remove the user from only the supplemental GROUPS\n"
+	                "                                mentioned by the -G option without removing\n"
+	                "                                the user from other groups\n"), usageout);
+	(void) fputs (_("  -R, --root CHROOT_DIR         directory to chroot into\n"), usageout);
 	(void) fputs (_("  -s, --shell SHELL             new login shell for the user account\n"), usageout);
 	(void) fputs (_("  -u, --uid UID                 new UID for the user account\n"), usageout);
 	(void) fputs (_("  -U, --unlock                  unlock the user account\n"), usageout);
@@ -716,7 +716,7 @@ static void update_group (void)
 		* If rflg+Gflg  is passed in AKA -rG invert is_member flag, which removes
 		* mentioned groups while leaving the others.
 		*/
-		if (Gflg && rflg && was_member) {
+		if (Gflg && rflg) {
 			is_member = !is_member;
 		}
 
@@ -765,7 +765,7 @@ static void update_group (void)
 				         "delete '%s' from group '%s'",
 				         user_name, ngrp->gr_name));
 			}
-		} else {
+		} else if (is_member) {
 			/* User was not a member but is now a member this
 			 * group.
 			 */
@@ -839,7 +839,7 @@ static void update_gshadow (void)
 		* If rflg+Gflg  is passed in AKA -rG invert is_member, to remove targeted
 		* groups while leaving the user apart of groups not mentioned
 		*/
-		if (Gflg && rflg && was_member) {
+		if (Gflg && rflg) {
 			is_member = !is_member;
 		}
 
@@ -1095,7 +1095,7 @@ static void process_flags (int argc, char **argv)
 			case 'l':
 				if (!is_valid_user_name (optarg)) {
 					fprintf (stderr,
-					         _("%s: invalid user name '%s'\n"),
+					         _("%s: invalid user name '%s': use --badname to ignore\n"),
 					         Prog, optarg);
 					exit (E_BAD_ARG);
 				}
@@ -1882,6 +1882,11 @@ static void move_home (void)
 			         Prog, prefix_user_home, prefix_user_newhome);
 			fail_exit (E_HOMEDIR);
 		}
+	} else {
+		fprintf (stderr,
+		         _("%s: The previous home directory (%s) does not "
+		           "exist or is inaccessible. Move cannot be completed.\n"),
+		         Prog, prefix_user_home);
 	}
 }
 

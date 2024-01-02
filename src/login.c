@@ -124,7 +124,7 @@ static void get_pam_user (char **ptr_pam_user);
 #endif
 
 static void init_env (void);
-static RETSIGTYPE alarm_handler (int);
+static void alarm_handler (int);
 
 /*
  * usage - print login command usage and exit
@@ -397,7 +397,7 @@ static void init_env (void)
 }
 
 
-static RETSIGTYPE alarm_handler (unused int sig)
+static void alarm_handler (unused int sig)
 {
 	write (STDERR_FILENO, tmsg, strlen (tmsg));
 	_exit (0);
@@ -419,9 +419,7 @@ static void get_pam_user (char **ptr_pam_user)
 	retcode = pam_get_item (pamh, PAM_USER, (const void **)&ptr_user);
 	PAM_FAIL_CHECK;
 
-	if (NULL != *ptr_pam_user) {
-		free (*ptr_pam_user);
-	}
+	free (*ptr_pam_user);
 	if (NULL != ptr_user) {
 		*ptr_pam_user = xstrdup ((const char *)ptr_user);
 	} else {
@@ -872,9 +870,7 @@ int main (int argc, char **argv)
 	 * PAM APIs.
 	 */
 	get_pam_user (&pam_user);
-	if (NULL != username) {
-		free (username);
-	}
+	free (username);
 	username = xstrdup (pam_user);
 	failent_user = get_failent_user (username);
 

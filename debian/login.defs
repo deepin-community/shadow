@@ -148,7 +148,7 @@ TTYPERM		0600
 #
 ERASECHAR	0177
 KILLCHAR	025
-UMASK		027
+UMASK		022
 
 # HOME_MODE is used by useradd(8) and newusers(8) to set the mode for new
 # home directories.
@@ -336,14 +336,6 @@ NONEXISTENT	/nonexistent
 # primary group.
 #
 #GRANT_AUX_GROUP_SUBIDS yes
-
-#
-# Prevents an empty password field to be interpreted as "no authentication
-# required".
-# Set to "yes" to prevent for all accounts
-# Set to "superuser" to prevent for UID 0 / root (default)
-# Set to "no" to not prevent for any account (dangerous, historical default)
-PREVENT_NO_AUTH superuser
 
 #
 # Select the HMAC cryptography algorithm.

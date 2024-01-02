@@ -76,7 +76,7 @@
 	</term>
 	<listitem>
 	  <para>
-	    Print only lastlog records older than <emphasis remap='I'>DAYS</emphasis>.
+	    Print only lastlog records older than <replaceable>DAYS</replaceable>.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -108,6 +108,7 @@
 	    Apply changes in the <replaceable>CHROOT_DIR</replaceable>
 	    directory and use the configuration files from the
 	    <replaceable>CHROOT_DIR</replaceable> directory.
+	    Only absolute paths are supported.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -129,7 +130,7 @@
 	<listitem>
 	  <para>
 	    Print the lastlog records more recent than
-	    <emphasis remap='I'>DAYS</emphasis>.
+	    <replaceable>DAYS</replaceable>.
 	  </para>
 	</listitem>
       </varlistentry>

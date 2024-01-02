@@ -6,7 +6,7 @@ Notes:
 
 --- a/src/login.c
 +++ b/src/login.c
-@@ -829,6 +829,24 @@
+@@ -827,6 +827,24 @@
  			(void) puts ("");
  			(void) puts (_("Login incorrect"));
  

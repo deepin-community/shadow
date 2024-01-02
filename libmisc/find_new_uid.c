@@ -60,6 +60,13 @@ static int get_ranges (bool sys_user, uid_t *min_id, uid_t *max_id,
                             (unsigned long) *max_id);
 			return EINVAL;
 		}
+		/*
+		 * Zero is reserved for root and the allocation algorithm does not
+		 * work right with it.
+		 */
+		if (*min_id == 0) {
+			*min_id = (uid_t) 1;
+		}
 	} else {
 		/* Non-system users */
 
@@ -98,7 +105,7 @@ static int get_ranges (bool sys_user, uid_t *min_id, uid_t *max_id,
 static int check_uid(const uid_t uid,
 		     const uid_t uid_min,
 		     const uid_t uid_max,
-		     bool *used_uids)
+		     const bool *used_uids)
 {
 	/* First test that the preferred ID is in the range */
 	if (uid < uid_min || uid > uid_max) {

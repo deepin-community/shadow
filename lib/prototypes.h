@@ -159,12 +159,12 @@ extern int getlong (const char *numstr, /*@out@*/long int *result);
 extern int get_pid (const char *pidstr, pid_t *pid);
 
 /* getrange */
-extern int getrange (char *range,
+extern int getrange (const char *range,
                      unsigned long *min, bool *has_min,
                      unsigned long *max, bool *has_max);
 
 /* gettime.c */
-extern time_t gettime ();
+extern time_t gettime (void);
 
 /* get_uid.c */
 extern int get_uid (const char *uidstr, uid_t *uid);
@@ -242,8 +242,8 @@ extern /*@null@*//*@only@*/struct passwd *get_my_pwent (void);
 
 /* nss.c */
 #include <libsubid/subid.h>
-extern void nss_init(char *nsswitch_path);
-extern bool nss_is_initialized();
+extern void nss_init(const char *nsswitch_path);
+extern bool nss_is_initialized(void);
 
 struct subid_nss_ops {
 	/*
@@ -293,7 +293,7 @@ struct subid_nss_ops {
 	void *handle;
 };
 
-extern struct subid_nss_ops *get_subid_nss_handle();
+extern struct subid_nss_ops *get_subid_nss_handle(void);
 
 
 /* pam_pass_non_interactive.c */
@@ -324,12 +324,12 @@ extern struct passwd *prefix_getpwuid(uid_t uid);
 extern struct passwd *prefix_getpwnam(const char* name);
 extern struct spwd *prefix_getspnam(const char* name);
 extern struct group *prefix_getgr_nam_gid(const char *grname);
-extern void prefix_setpwent();
-extern struct passwd* prefix_getpwent();
-extern void prefix_endpwent();
-extern void prefix_setgrent();
-extern struct group* prefix_getgrent();
-extern void prefix_endgrent();
+extern void prefix_setpwent(void);
+extern struct passwd* prefix_getpwent(void);
+extern void prefix_endpwent(void);
+extern void prefix_setgrent(void);
+extern struct group* prefix_getgrent(void);
+extern void prefix_endgrent(void);
 
 /* pwd2spwd.c */
 #ifndef USE_PAM
@@ -480,10 +480,9 @@ extern int setutmpx (struct utmpx *utx);
 extern bool valid (const char *, const struct passwd *);
 
 /* xmalloc.c */
-extern /*@maynotreturn@*/ /*@only@*//*@out@*//*@notnull@*/char *xmalloc (size_t size)
+extern /*@maynotreturn@*/ /*@only@*//*@out@*//*@notnull@*/void *xmalloc (size_t size)
   /*@ensures MaxSet(result) == (size - 1); @*/;
 extern /*@maynotreturn@*/ /*@only@*//*@notnull@*/char *xstrdup (const char *);
-extern void xfree(void *ap);
 
 /* xgetpwnam.c */
 extern /*@null@*/ /*@only@*/struct passwd *xgetpwnam (const char *);

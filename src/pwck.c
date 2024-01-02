@@ -128,7 +128,7 @@ static /*@noreturn@*/void usage (int status)
 		                  "Options:\n"),
 		                Prog);
 	}
-	(void) fputs (_("  -b, --badnames                allow bad names\n"), usageout);
+	(void) fputs (_("  -b, --badname                 allow bad names\n"), usageout);
 	(void) fputs (_("  -h, --help                    display this help message and exit\n"), usageout);
 	(void) fputs (_("  -q, --quiet                   report errors only\n"), usageout);
 	(void) fputs (_("  -r, --read-only               display errors and warnings\n"
@@ -153,7 +153,7 @@ static void process_flags (int argc, char **argv)
 {
 	int c;
 	static struct option long_options[] = {
-		{"badnames",  no_argument,       NULL, 'b'},
+		{"badname",   no_argument,       NULL, 'b'},
 		{"help",      no_argument,       NULL, 'h'},
 		{"quiet",     no_argument,       NULL, 'q'},
 		{"read-only", no_argument,       NULL, 'r'},
@@ -366,7 +366,7 @@ static void check_pw_file (int *errors, bool *changed)
 {
 	struct commonio_entry *pfe, *tpfe;
 	struct passwd *pwd;
-	struct spwd *spw;
+	const struct spwd *spw;
 	uid_t min_sys_id = (uid_t) getdef_ulong ("SYS_UID_MIN", 101UL);
 	uid_t max_sys_id = (uid_t) getdef_ulong ("SYS_UID_MAX", 999UL);
 
@@ -470,7 +470,8 @@ static void check_pw_file (int *errors, bool *changed)
 		 */
 
 		if (!is_valid_user_name (pwd->pw_name)) {
-			printf (_("invalid user name '%s'\n"), pwd->pw_name);
+			printf (_("invalid user name '%s': use --badname to ignore\n"),
+					pwd->pw_name);
 			*errors += 1;
 		}
 
@@ -498,9 +499,9 @@ static void check_pw_file (int *errors, bool *changed)
 		}
 
 		/*
-		 * If uid is system and has a home directory, then check
+		 * If uid is not system and has a home directory, then check
 		 */
-		if (!(pwd->pw_uid >= min_sys_id && pwd->pw_uid <= max_sys_id && pwd->pw_dir && pwd->pw_dir[0])) {
+		if (!(pwd->pw_uid >= min_sys_id && pwd->pw_uid <= max_sys_id ) && pwd->pw_dir && pwd->pw_dir[0]) {
 			/*
 			 * Make sure the home directory exists
 			 */
@@ -584,7 +585,7 @@ static void check_pw_file (int *errors, bool *changed)
 				spw_opened = true;
 			}
 #endif				/* WITH_TCB */
-			spw = (struct spwd *) spw_locate (pwd->pw_name);
+			spw = spw_locate (pwd->pw_name);
 			if (NULL == spw) {
 				printf (_("no matching password file entry in %s\n"),
 				        spw_dbname ());

@@ -74,7 +74,7 @@ static uid_t bywho;
 
 /* local function prototypes */
 static void usage (int status);
-static RETSIGTYPE catch_signals (int killed);
+static void catch_signals (int killed);
 static bool is_valid_user_list (const char *users);
 static void process_flags (int argc, char **argv);
 static void check_flags (int argc, int opt_index);
@@ -137,7 +137,7 @@ static void usage (int status)
  *	calls catch_signals() with a signal number, the terminal modes are
  *	then reset.
  */
-static RETSIGTYPE catch_signals (int killed)
+static void catch_signals (int killed)
 {
 	static TERMIO sgtty;
 
@@ -1186,17 +1186,11 @@ int main (int argc, char **argv)
 
 #ifdef SHADOWGRP
 	if (is_shadowgrp) {
-		if (sgent.sg_adm) {
-			xfree(sgent.sg_adm);
-		}
-		if (sgent.sg_mem) {
-			xfree(sgent.sg_mem);
-		}
+		free(sgent.sg_adm);
+		free(sgent.sg_mem);
 	}
 #endif
-	if (grent.gr_mem) {
-		xfree(grent.gr_mem);
-	}
+	free(grent.gr_mem);
 	exit (E_SUCCESS);
 }
 

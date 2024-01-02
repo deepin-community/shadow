@@ -21,6 +21,10 @@ DEB_CONFIGURE_EXTRA_FLAGS := --without-libcrack \
 	--without-tcb \
 	 SHELL=/bin/sh
 
+ifneq ($(filter nodoc,$(DEB_BUILD_PROFILES)),)
+DEB_CONFIGURE_EXTRA_FLAGS += --disable-man
+endif
+
 # Set the default editor for vipw/vigr
 CFLAGS += -DDEFAULT_EDITOR="\"sensible-editor\""
 

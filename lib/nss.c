@@ -9,6 +9,7 @@
 #include "prototypes.h"
 #include "../libsubid/subid.h"
 #include "shadowlog_internal.h"
+#include "shadowlog.h"
 
 #define NSSWITCH "/etc/nsswitch.conf"
 
@@ -29,7 +30,7 @@ bool nss_is_initialized() {
 	return atomic_load(&nss_init_completed);
 }
 
-void nss_exit() {
+static void nss_exit(void) {
 	if (nss_is_initialized() && subid_nss) {
 		dlclose(subid_nss->handle);
 		free(subid_nss);
@@ -38,10 +39,11 @@ void nss_exit() {
 }
 
 // nsswitch_path is an argument only to support testing.
-void nss_init(char *nsswitch_path) {
+void nss_init(const char *nsswitch_path) {
 	FILE *nssfp = NULL;
 	char *line = NULL, *p, *token, *saveptr;
 	size_t len = 0;
+	FILE *shadow_logfd = log_get_logfd();
 
 	if (atomic_flag_test_and_set(&nss_init_started)) {
 		// Another thread has started nss_init, wait for it to complete
@@ -57,7 +59,6 @@ void nss_init(char *nsswitch_path) {
 	//   subid:	files
 	nssfp = fopen(nsswitch_path, "r");
 	if (!nssfp) {
-		fprintf(shadow_logfd, "Failed opening %s: %m", nsswitch_path);
 		atomic_store(&nss_init_completed, true);
 		return;
 	}
