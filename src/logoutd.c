@@ -15,13 +15,14 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utmpx.h>
 #include "defines.h"
 #include "prototypes.h"
 #include "shadowlog.h"
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "logoutd";
 
 #ifndef DEFAULT_HUP_MESG
 #define DEFAULT_HUP_MESG _("login time exceeded\n\n")
@@ -31,22 +32,17 @@ const char *Prog;
 #define HUP_MESG_FILE "/etc/logoutd.mesg"
 #endif
 
+
 /* local function prototypes */
-#ifdef USE_UTMPX
 static int check_login (const struct utmpx *ut);
-#else				/* !USE_UTMPX */
-static int check_login (const struct utmp *ut);
-#endif				/* !USE_UTMPX */
 static void send_mesg_to_tty (int tty_fd);
 
+
 /*
- * check_login - check if user (struct utmpx/utmp) allowed to stay logged in
+ * check_login - check if user (struct utmpx) allowed to stay logged in
  */
-#ifdef USE_UTMPX
-static int check_login (const struct utmpx *ut)
-#else				/* !USE_UTMPX */
-static int check_login (const struct utmp *ut)
-#endif				/* !USE_UTMPX */
+static int
+check_login(const struct utmpx *ut)
 {
 	char user[sizeof (ut->ut_user) + 1];
 	time_t now;
@@ -116,23 +112,20 @@ static void send_mesg_to_tty (int tty_fd)
  *
  *	logoutd is started at system boot time and enforces the login
  *	time and port restrictions specified in /etc/porttime. The
- *	utmpx/utmp file is periodically scanned and offending users are logged
+ *	utmp file is periodically scanned and offending users are logged
  *	off from the system.
  */
-int main (int argc, char **argv)
+int
+main(int argc, char **argv)
 {
-	int i;
-	int status;
-	pid_t pid;
+	int    i;
+	int    status;
+	pid_t  pid;
 
-#ifdef USE_UTMPX
-	struct utmpx *ut;
-#else				/* !USE_UTMPX */
-	struct utmp *ut;
-#endif				/* !USE_UTMPX */
-	char user[sizeof (ut->ut_user) + 1];	/* terminating NUL */
-	char tty_name[sizeof (ut->ut_line) + 6];	/* /dev/ + NUL */
-	int tty_fd;
+	struct utmpx  *ut;
+	char          user[sizeof (ut->ut_user) + 1];	/* terminating NUL */
+	char          tty_name[sizeof (ut->ut_line) + 6];	/* /dev/ + NUL */
+	int           tty_fd;
 
 	if (1 != argc) {
 		(void) fputs (_("Usage: logoutd\n"), stderr);
@@ -164,39 +157,29 @@ int main (int argc, char **argv)
 	/*
 	 * Start syslogging everything
 	 */
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
-	OPENLOG ("logoutd");
+	OPENLOG (Prog);
 
 	/*
-	 * Scan the utmpx/utmp file once per minute looking for users that
+	 * Scan the utmp file once per minute looking for users that
 	 * are not supposed to still be logged in.
 	 */
 	while (true) {
 
 		/*
-		 * Attempt to re-open the utmpx/utmp file. The file is only
+		 * Attempt to re-open the utmp file. The file is only
 		 * open while it is being used.
 		 */
-#ifdef USE_UTMPX
-		setutxent ();
-#else				/* !USE_UTMPX */
-		setutent ();
-#endif				/* !USE_UTMPX */
+		setutxent();
 
 		/*
-		 * Read all of the entries in the utmpx/utmp file. The entries
+		 * Read all of the entries in the utmp file. The entries
 		 * for login sessions will be checked to see if the user
 		 * is permitted to be signed on at this time.
 		 */
-#ifdef USE_UTMPX
-		while ((ut = getutxent ()) != NULL)
-#else				/* !USE_UTMPX */
-		while ((ut = getutent ()) != NULL)
-#endif				/* !USE_UTMPX */
-		{
+		while ((ut = getutxent()) != NULL) {
 			if (ut->ut_type != USER_PROCESS) {
 				continue;
 			}
@@ -228,7 +211,7 @@ int main (int argc, char **argv)
 				tty_name[0] = '\0';
 			}
 
-			strncat (tty_name, ut->ut_line, UT_LINESIZE);
+			strncat(tty_name, ut->ut_line, NITEMS(ut->ut_line));
 #ifndef O_NOCTTY
 #define O_NOCTTY 0
 #endif
@@ -259,11 +242,7 @@ int main (int argc, char **argv)
 			exit (EXIT_SUCCESS);
 		}
 
-#ifdef USE_UTMPX
-		endutxent ();
-#else				/* !USE_UTMPX */
-		endutent ();
-#endif				/* !USE_UTMPX */
+		endutxent();
 
 #ifndef DEBUG
 		sleep (60);

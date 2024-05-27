@@ -47,7 +47,7 @@
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "pwck";
 
 static bool use_system_pw_file = true;
 static bool use_system_spw_file = true;
@@ -66,7 +66,7 @@ static bool quiet = false;		/* don't report warnings, only errors */
 
 /* local function prototypes */
 static void fail_exit (int code);
-static /*@noreturn@*/void usage (int status);
+NORETURN static void usage (int status);
 static void process_flags (int argc, char **argv);
 static void open_files (void);
 static void close_files (bool changed);
@@ -109,7 +109,9 @@ static void fail_exit (int code)
 /*
  * usage - print syntax message and exit
  */
-static /*@noreturn@*/void usage (int status)
+NORETURN
+static void
+usage (int status)
 {
 	FILE *usageout = (E_SUCCESS != status) ? stderr : stdout;
 #ifdef WITH_TCB
@@ -367,8 +369,8 @@ static void check_pw_file (int *errors, bool *changed)
 	struct commonio_entry *pfe, *tpfe;
 	struct passwd *pwd;
 	const struct spwd *spw;
-	uid_t min_sys_id = (uid_t) getdef_ulong ("SYS_UID_MIN", 101UL);
-	uid_t max_sys_id = (uid_t) getdef_ulong ("SYS_UID_MAX", 999UL);
+	uid_t min_sys_id = getdef_ulong ("SYS_UID_MIN", 101UL);
+	uid_t max_sys_id = getdef_ulong ("SYS_UID_MAX", 999UL);
 
 	/*
 	 * Loop through the entire password file.
@@ -607,7 +609,7 @@ static void check_pw_file (int *errors, bool *changed)
 					sp.sp_inact  = -1;
 					sp.sp_expire = -1;
 					sp.sp_flag   = SHADOW_SP_FLAG_UNSET;
-					sp.sp_lstchg = (long) gettime () / SCALE;
+					sp.sp_lstchg = gettime () / DAY;
 					if (0 == sp.sp_lstchg) {
 						/* Better disable aging than
 						 * requiring a password change
@@ -812,9 +814,9 @@ static void check_spw_file (int *errors, bool *changed)
 		 * Warn if last password change in the future.  --marekm
 		 */
 		if (!quiet) {
-			time_t t = time ((time_t *) 0);
+			time_t t = time (NULL);
 			if (   (t != 0)
-			    && (spw->sp_lstchg > (long) t / SCALE)) {
+			    && (spw->sp_lstchg > (long) t / DAY)) {
 				printf (_("user %s: last password change in the future\n"),
 			                spw->sp_namp);
 				*errors += 1;
@@ -831,10 +833,6 @@ int main (int argc, char **argv)
 	int errors = 0;
 	bool changed = false;
 
-	/*
-	 * Get my name so that I can use it to report errors.
-	 */
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
@@ -844,7 +842,7 @@ int main (int argc, char **argv)
 
 	process_root_flag ("-R", argc, argv);
 
-	OPENLOG ("pwck");
+	OPENLOG (Prog);
 
 	/* Parse the command line arguments */
 	process_flags (argc, argv);

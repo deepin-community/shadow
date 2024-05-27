@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: shadowutils\n"
 "Report-Msgid-Bugs-To: pkg-shadow-devel@lists.alioth.debian.org\n"
-"POT-Creation-Date: 2022-11-08 10:37-0600\n"
+"POT-Creation-Date: 2022-07-27 22:49+0800\n"
 "PO-Revision-Date: 2017-02-07 17:09+0500\n"
 "Last-Translator: Baurzhan Muftakhidinov <baurthefirst@gmail.com>\n"
 "Language-Team: Kazakh <kk_KZ@googlegroups.com>\n"
@@ -2392,11 +2392,6 @@ msgstr ""
 "аралығы\n"
 
 msgid ""
-"  -F, --add-subids-for-system   add entries to sub[ud]id even when adding a "
-"system user\n"
-msgstr ""
-
-msgid ""
 "  -g, --gid GROUP               name or ID of the primary group of the new\n"
 "                                account\n"
 msgstr ""
@@ -2943,17 +2938,6 @@ msgstr "%s: ескерту: %s ескі үй бумасын толығымен �
 #, c-format
 msgid "%s: cannot rename directory %s to %s\n"
 msgstr "%s: %s бумасының атын %s атына ауыстыру мүмкін емес\n"
-
-#, fuzzy, c-format
-#| msgid ""
-#| "%s: The previous home directory (%s) was not a directory. It is not "
-#| "removed and no home directories are created.\n"
-msgid ""
-"%s: The previous home directory (%s) does not exist or is inaccessible. Move "
-"cannot be completed.\n"
-msgstr ""
-"%s: Алдыңғы үй бумасы (%s) бума емес болған. Ол өшірілмеді де, ешбір үй "
-"бумасы жасалмады.\n"
 
 #, c-format
 msgid "%s: failed to copy the lastlog entry of user %lu to user %lu: %s\n"

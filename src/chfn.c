@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <getopt.h>
+
+#include "alloc.h"
 #include "defines.h"
 #include "getdef.h"
 #include "nscd.h"
@@ -34,7 +36,7 @@
 /*
  * Global variables.
  */
-const char *Prog;
+static const char Prog[] = "chfn";
 static char fullnm[BUFSIZ];
 static char roomno[BUFSIZ];
 static char workph[BUFSIZ];
@@ -55,7 +57,7 @@ static bool pw_locked = false;
 
 /* local function prototypes */
 static void fail_exit (int code);
-static /*@noreturn@*/void usage (int status);
+NORETURN static void usage (int status);
 static bool may_change_field (int);
 static void new_fields (void);
 static char *copy_field (char *, char *, char *);
@@ -86,7 +88,9 @@ static void fail_exit (int code)
 /*
  * usage - print command line syntax and exit
  */
-static /*@noreturn@*/void usage (int status)
+NORETURN
+static void
+usage (int status)
 {
 	FILE *usageout = (E_SUCCESS != status) ? stderr : stdout;
 	(void) fprintf (usageout,
@@ -175,19 +179,19 @@ static void new_fields (void)
 	if (may_change_field ('r')) {
 		change_field (roomno, sizeof roomno, _("Room Number"));
 	} else {
-		printf (_("\t%s: %s\n"), _("Room Number"), fullnm);
+		printf (_("\t%s: %s\n"), _("Room Number"), roomno);
 	}
 
 	if (may_change_field ('w')) {
 		change_field (workph, sizeof workph, _("Work Phone"));
 	} else {
-		printf (_("\t%s: %s\n"), _("Work Phone"), fullnm);
+		printf (_("\t%s: %s\n"), _("Work Phone"), workph);
 	}
 
 	if (may_change_field ('h')) {
 		change_field (homeph, sizeof homeph, _("Home Phone"));
 	} else {
-		printf (_("\t%s: %s\n"), _("Home Phone"), fullnm);
+		printf (_("\t%s: %s\n"), _("Home Phone"), homeph);
 	}
 
 	if (amroot) {
@@ -358,7 +362,7 @@ static void check_perms (const struct passwd *pw)
 	 * check if the change is allowed by SELinux policy.
 	 */
 	if ((pw->pw_uid != getuid ())
-	    && (check_selinux_permit ("chfn") != 0)) {
+	    && (check_selinux_permit (Prog) != 0)) {
 		fprintf (stderr, _("%s: Permission denied.\n"), Prog);
 		closelog ();
 		exit (E_NOPERM);
@@ -373,7 +377,7 @@ static void check_perms (const struct passwd *pw)
 	 * --marekm
 	 */
 	if (!amroot && getdef_bool ("CHFN_AUTH")) {
-		passwd_check (pw->pw_name, pw->pw_passwd, "chfn");
+		passwd_check (pw->pw_name, pw->pw_passwd, Prog);
 	}
 
 #else				/* !USE_PAM */
@@ -385,7 +389,7 @@ static void check_perms (const struct passwd *pw)
 		exit (E_NOPERM);
 	}
 
-	retval = pam_start ("chfn", pampw->pw_name, &conv, &pamh);
+	retval = pam_start (Prog, pampw->pw_name, &conv, &pamh);
 
 	if (PAM_SUCCESS == retval) {
 		retval = pam_authenticate (pamh, 0);
@@ -510,28 +514,28 @@ static void get_old_fields (const char *gecos)
 	 * Now get the full name. It is the first comma separated field in
 	 * the GECOS field.
 	 */
-	cp = copy_field (old_gecos, fflg ? (char *) 0 : fullnm, slop);
+	cp = copy_field (old_gecos, fflg ? NULL : fullnm, slop);
 
 	/*
 	 * Now get the room number. It is the next comma separated field,
 	 * if there is indeed one.
 	 */
 	if (NULL != cp) {
-		cp = copy_field (cp, rflg ? (char *) 0 : roomno, slop);
+		cp = copy_field (cp, rflg ? NULL : roomno, slop);
 	}
 
 	/*
 	 * Now get the work phone number. It is the third field.
 	 */
 	if (NULL != cp) {
-		cp = copy_field (cp, wflg ? (char *) 0 : workph, slop);
+		cp = copy_field (cp, wflg ? NULL : workph, slop);
 	}
 
 	/*
 	 * Now get the home phone number. It is the fourth field.
 	 */
 	if (NULL != cp) {
-		cp = copy_field (cp, hflg ? (char *) 0 : homeph, slop);
+		cp = copy_field (cp, hflg ? NULL : homeph, slop);
 	}
 
 	/*
@@ -612,15 +616,12 @@ int main (int argc, char **argv)
 	char new_gecos[BUFSIZ];	/* buffer for new GECOS fields       */
 	char *user;
 
-	/*
-	 * Get the program name. The program name is used as a
-	 * prefix to most error messages.
-	 */
-	Prog = Basename (argv[0]);
+	sanitize_env ();
+	check_fds ();
+
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
-	sanitize_env ();
 	(void) setlocale (LC_ALL, "");
 	(void) bindtextdomain (PACKAGE, LOCALEDIR);
 	(void) textdomain (PACKAGE);
@@ -633,7 +634,7 @@ int main (int argc, char **argv)
 	 */
 	amroot = (getuid () == 0);
 
-	OPENLOG ("chfn");
+	OPENLOG (Prog);
 
 	/* parse the command line options */
 	process_flags (argc, argv);

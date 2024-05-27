@@ -18,6 +18,8 @@
 #include "pam_defs.h"
 #endif				/* USE_PAM */
 #include <pwd.h>
+
+#include "alloc.h"
 #include "defines.h"
 #include "prototypes.h"
 #include "groupio.h"
@@ -42,7 +44,7 @@
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "groupmems";
 
 static char *adduser = NULL;
 static char *deluser = NULL;
@@ -66,7 +68,7 @@ static void remove_user (const char *user,
                          const struct group *grp);
 static void purge_members (const struct group *grp);
 static void display_members (const char *const *members);
-static /*@noreturn@*/void usage (int status);
+NORETURN static void usage (int status);
 static void process_flags (int argc, char **argv);
 static void check_perms (void);
 static void fail_exit (int code);
@@ -89,7 +91,7 @@ static char *whoami (void)
 }
 
 /*
- * add_user - Add an user to the specified group
+ * add_user - Add a user to the specified group
  */
 static void add_user (const char *user,
                       const struct group *grp)
@@ -125,7 +127,7 @@ static void add_user (const char *user,
 			static struct sgrp sgrent;
 			sgrent.sg_name = xstrdup (newgrp->gr_name);
 			sgrent.sg_mem = dup_list (newgrp->gr_mem);
-			sgrent.sg_adm = (char **) xmalloc (sizeof (char *));
+			sgrent.sg_adm = XMALLOC(1, char *);
 #ifdef FIRST_MEMBER_IS_ADMIN
 			if (sgrent.sg_mem[0]) {
 				sgrent.sg_adm[0] = xstrdup (sgrent.sg_mem[0]);
@@ -172,7 +174,7 @@ static void add_user (const char *user,
 }
 
 /*
- * remove_user - Remove an user from a given group
+ * remove_user - Remove a user from a given group
  */
 static void remove_user (const char *user,
                          const struct group *grp)
@@ -208,7 +210,7 @@ static void remove_user (const char *user,
 			static struct sgrp sgrent;
 			sgrent.sg_name = xstrdup (newgrp->gr_name);
 			sgrent.sg_mem = dup_list (newgrp->gr_mem);
-			sgrent.sg_adm = (char **) xmalloc (sizeof (char *));
+			sgrent.sg_adm = XMALLOC(1, char *);
 #ifdef FIRST_MEMBER_IS_ADMIN
 			if (sgrent.sg_mem[0]) {
 				sgrent.sg_adm[0] = xstrdup (sgrent.sg_mem[0]);
@@ -281,9 +283,9 @@ static void purge_members (const struct group *grp)
 			/* Create a shadow group based on this group */
 			static struct sgrp sgrent;
 			sgrent.sg_name = xstrdup (newgrp->gr_name);
-			sgrent.sg_mem = (char **) xmalloc (sizeof (char *));
+			sgrent.sg_mem = XMALLOC(1, char *);
 			sgrent.sg_mem[0] = NULL;
-			sgrent.sg_adm = (char **) xmalloc (sizeof (char *));
+			sgrent.sg_adm = XMALLOC(1, char *);
 			sgrent.sg_adm[0] = NULL;
 
 			/* Move any password to gshadow */
@@ -339,7 +341,9 @@ static void display_members (const char *const *members)
 	}
 }
 
-static /*@noreturn@*/void usage (int status)
+NORETURN
+static void
+usage (int status)
 {
 	FILE *usageout = (EXIT_SUCCESS != status) ? stderr : stdout;
 	(void) fprintf (usageout,
@@ -439,7 +443,7 @@ static void check_perms (void)
 			fail_exit (1);
 		}
 
-		retval = pam_start ("groupmems", pampw->pw_name, &conv, &pamh);
+		retval = pam_start (Prog, pampw->pw_name, &conv, &pamh);
 
 		if (PAM_SUCCESS == retval) {
 			retval = pam_authenticate (pamh, 0);
@@ -569,10 +573,6 @@ int main (int argc, char **argv)
 	char *name;
 	const struct group *grp;
 
-	/*
-	 * Get my name so that I can use it to report errors.
-	 */
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
@@ -582,7 +582,7 @@ int main (int argc, char **argv)
 
 	process_root_flag ("-R", argc, argv);
 
-	OPENLOG ("groupmems");
+	OPENLOG (Prog);
 
 #ifdef SHADOWGRP
 	is_shadowgrp = sgr_file_present ();

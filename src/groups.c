@@ -14,13 +14,16 @@
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
+
+#include "alloc.h"
 #include "defines.h"
 #include "prototypes.h"
 #include "shadowlog.h"
+
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "groups";
 
 /* local function prototypes */
 static void print_groups (const char *member);
@@ -88,16 +91,12 @@ int main (int argc, char **argv)
 	GETGROUPS_T *groups;
 
 	sys_ngroups = sysconf (_SC_NGROUPS_MAX);
-	groups = (GETGROUPS_T *) malloc (sizeof (GETGROUPS_T) * sys_ngroups);
+	groups = MALLOC(sys_ngroups, GETGROUPS_T);
 
 	(void) setlocale (LC_ALL, "");
 	(void) bindtextdomain (PACKAGE, LOCALEDIR);
 	(void) textdomain (PACKAGE);
 
-	/*
-	 * Get the program name so that error messages can use it.
-	 */
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
