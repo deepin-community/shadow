@@ -36,7 +36,7 @@
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "chgpasswd";
 static bool eflg   = false;
 static bool md5flg = false;
 #if defined(USE_SHA_CRYPT) || defined(USE_BCRYPT) || defined(USE_YESCRYPT)
@@ -63,7 +63,7 @@ static bool gr_locked = false;
 
 /* local function prototypes */
 static void fail_exit (int code);
-static /*@noreturn@*/void usage (int status);
+NORETURN static void usage (int status);
 static void process_flags (int argc, char **argv);
 static void check_flags (void);
 static void check_perms (void);
@@ -99,7 +99,9 @@ static void fail_exit (int code)
 /*
  * usage - display usage message and exit
  */
-static /*@noreturn@*/void usage (int status)
+NORETURN
+static void
+usage (int status)
 {
 	FILE *usageout = (E_SUCCESS != status) ? stderr : stdout;
 	(void) fprintf (usageout,
@@ -184,6 +186,13 @@ static void process_flags (int argc, char **argv)
 		case 's':
 			sflg = true;
                         bad_s = 0;
+
+			if (!crypt_method) {
+				fprintf (stderr,
+				         _("%s: no crypt method defined\n"),
+				         Prog);
+				usage (E_USAGE);
+			}
 #if defined(USE_SHA_CRYPT)
 			if (  (   ((0 == strcmp (crypt_method, "SHA256")) || (0 == strcmp (crypt_method, "SHA512")))
 			       && (0 == getlong(optarg, &sha_rounds)))) {
@@ -294,7 +303,7 @@ static void check_perms (void)
 		exit (1);
 	}
 
-	retval = pam_start ("chgpasswd", pampw->pw_name, &conv, &pamh);
+	retval = pam_start (Prog, pampw->pw_name, &conv, &pamh);
 
 	if (PAM_SUCCESS == retval) {
 		retval = pam_authenticate (pamh, 0);
@@ -414,7 +423,6 @@ int main (int argc, char **argv)
 	int errors = 0;
 	int line = 0;
 
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
@@ -422,11 +430,17 @@ int main (int argc, char **argv)
 	(void) bindtextdomain (PACKAGE, LOCALEDIR);
 	(void) textdomain (PACKAGE);
 
+#ifdef WITH_SELINUX
+	if (check_selinux_permit ("passwd") != 0) {
+		return (E_NOPERM);
+	}
+#endif				/* WITH_SELINUX */
+
 	process_root_flag ("-R", argc, argv);
 
 	process_flags (argc, argv);
 
-	OPENLOG ("chgpasswd");
+	OPENLOG (Prog);
 
 	check_perms ();
 
@@ -441,7 +455,7 @@ int main (int argc, char **argv)
 	 * group entry for each group will be looked up in the appropriate
 	 * file (gshadow or group) and the password changed.
 	 */
-	while (fgets (buf, (int) sizeof buf, stdin) != (char *) 0) {
+	while (fgets (buf, (int) sizeof buf, stdin) != NULL) {
 		line++;
 		cp = strrchr (buf, '\n');
 		if (NULL != cp) {

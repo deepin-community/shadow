@@ -1,3 +1,9 @@
+shadow (1:4.14+dfsg1-0deepin1) UNRELEASED; urgency=medium
+
+  * New upstream version 4.14
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Mon, 27 May 2024 14:07:47 +0800
+
 shadow (1:4.13+dfsg1-3) unstable; urgency=medium
 
   * Team upload

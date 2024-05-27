@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: shadow-utils\n"
 "Report-Msgid-Bugs-To: pkg-shadow-devel@lists.alioth.debian.org\n"
-"POT-Creation-Date: 2022-11-08 10:37-0600\n"
+"POT-Creation-Date: 2022-07-27 22:49+0800\n"
 "PO-Revision-Date: 2022-08-22 02:33+0200\n"
 "Last-Translator: Temuri Doghonadze <temuri.doghonadze@gmail.com>\n"
 "Language-Team: Georgian <(nothing)>\n"
@@ -2371,11 +2371,6 @@ msgstr ""
 "პერიოდი\n"
 
 msgid ""
-"  -F, --add-subids-for-system   add entries to sub[ud]id even when adding a "
-"system user\n"
-msgstr ""
-
-msgid ""
 "  -g, --gid GROUP               name or ID of the primary group of the new\n"
 "                                account\n"
 msgstr ""
@@ -2918,17 +2913,6 @@ msgstr "%s: ძველი საწყისი საქაღალდის
 #, c-format
 msgid "%s: cannot rename directory %s to %s\n"
 msgstr "%s: საქაღალდის სახელის %s-დან %s-ზე გადარქმევის შეცდომა\n"
-
-#, fuzzy, c-format
-#| msgid ""
-#| "%s: The previous home directory (%s) was not a directory. It is not "
-#| "removed and no home directories are created.\n"
-msgid ""
-"%s: The previous home directory (%s) does not exist or is inaccessible. Move "
-"cannot be completed.\n"
-msgstr ""
-"%s: წინა საწყისი საქაღალდე (%s) საქაღალდეს არ წარმოადგენდა, ამიტომ ის არ "
-"წაშლილა და არც საქაღალდე შექმნილა.\n"
 
 #, c-format
 msgid "%s: failed to copy the lastlog entry of user %lu to user %lu: %s\n"

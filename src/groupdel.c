@@ -32,10 +32,11 @@
 #include "sgroupio.h"
 #endif
 #include "shadowlog.h"
+#include "run_part.h"
 /*
  * Global variables
  */
-const char *Prog;
+static const char Prog[] = "groupdel";
 
 static char *group_name;
 static gid_t group_id = -1;
@@ -58,7 +59,7 @@ static bool is_shadow_grp;
 #define E_GRP_UPDATE	10	/* can't update group file */
 
 /* local function prototypes */
-static /*@noreturn@*/void usage (int status);
+NORETURN static void usage (int status);
 static void grp_update (void);
 static void close_files (void);
 static void open_files (void);
@@ -68,7 +69,9 @@ static void process_flags (int argc, char **argv);
 /*
  * usage - display usage message and exit
  */
-static /*@noreturn@*/void usage (int status)
+NORETURN
+static void
+usage (int status)
 {
 	FILE *usageout = (E_SUCCESS != status) ? stderr : stdout;
 	(void) fprintf (usageout,
@@ -147,8 +150,7 @@ static void close_files (void)
 #ifdef WITH_AUDIT
 	audit_logger (AUDIT_DEL_GROUP, Prog,
 	              "removing group from /etc/group",
-	              group_name, (unsigned int) group_id,
-	              SHADOW_AUDIT_SUCCESS);
+	              group_name, group_id, SHADOW_AUDIT_SUCCESS);
 #endif
 	SYSLOG ((LOG_INFO,
 	         "group '%s' removed from %s",
@@ -172,8 +174,7 @@ static void close_files (void)
 #ifdef WITH_AUDIT
 		audit_logger (AUDIT_DEL_GROUP, Prog,
 		              "removing group from /etc/gshadow",
-		              group_name, (unsigned int) group_id,
-		              SHADOW_AUDIT_SUCCESS);
+		              group_name, group_id, SHADOW_AUDIT_SUCCESS);
 #endif
 		SYSLOG ((LOG_INFO,
 		         "group '%s' removed from %s",
@@ -188,9 +189,7 @@ static void close_files (void)
 	/* Report success at the system level */
 #ifdef WITH_AUDIT
 	audit_logger (AUDIT_DEL_GROUP, Prog,
-	              "",
-	              group_name, (unsigned int) group_id,
-	              SHADOW_AUDIT_SUCCESS);
+	              "", group_name, group_id, SHADOW_AUDIT_SUCCESS);
 #endif
 	SYSLOG ((LOG_INFO, "group '%s' removed\n", group_name));
 	del_cleanup (cleanup_report_del_group);
@@ -275,7 +274,7 @@ static void group_busy (gid_t gid)
 	 * If pwd isn't NULL, it stopped because the gid's matched.
 	 */
 
-	if (pwd == (struct passwd *) 0) {
+	if (pwd == NULL) {
 		return;
 	}
 
@@ -350,10 +349,6 @@ int main (int argc, char **argv)
 #endif				/* USE_PAM */
 #endif				/* ACCT_TOOLS_SETUID */
 
-	/*
-	 * Get my name so that I can use it to report errors.
-	 */
-	Prog = Basename (argv[0]);
 	log_set_progname(Prog);
 	log_set_logfd(stderr);
 
@@ -364,7 +359,7 @@ int main (int argc, char **argv)
 	process_root_flag ("-R", argc, argv);
 	prefix = process_prefix_flag ("-P", argc, argv);
 
-	OPENLOG ("groupdel");
+	OPENLOG (Prog);
 #ifdef WITH_AUDIT
 	audit_help_open ();
 #endif
@@ -390,7 +385,7 @@ int main (int argc, char **argv)
 			exit (1);
 		}
 
-		retval = pam_start ("groupdel", pampw->pw_name, &conv, &pamh);
+		retval = pam_start (Prog, pampw->pw_name, &conv, &pamh);
 	}
 
 	if (PAM_SUCCESS == retval) {
@@ -463,6 +458,11 @@ int main (int argc, char **argv)
 		group_busy (group_id);
 	}
 
+	if (run_parts ("/etc/shadow-maint/groupdel-pre.d", group_name,
+			Prog)) {
+		exit(1);
+	}
+
 	/*
 	 * Do the hard stuff - open the files, delete the group entries,
 	 * then close and update the files.
@@ -472,6 +472,11 @@ int main (int argc, char **argv)
 	grp_update ();
 
 	close_files ();
+
+	if (run_parts ("/etc/shadow-maint/groupdel-post.d", group_name,
+			Prog)) {
+		exit(1);
+	}
 
 	nscd_flush_cache ("group");
 	sssd_flush_cache (SSSD_DB_GROUP);
