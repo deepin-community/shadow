@@ -10,8 +10,8 @@ Note: It could be removed if pam_tally could report the number of failures
 --- a/src/login.c
 +++ b/src/login.c
 @@ -114,9 +114,9 @@
- #endif
- 			);
+ static void process_flags (int argc, char *const *argv);
+ static /*@observer@*/const char *get_failent_user (/*@returned@*/const char *user);
  
 -#ifndef USE_PAM
  static struct faillog faillog;
@@ -69,9 +69,9 @@ Note: It could be removed if pam_tally could report the number of failures
  			}
  		}
 +#ifndef USE_PAM
+ #ifdef ENABLE_LASTLOG
  		if (   getdef_bool ("LASTLOG_ENAB")
  		    && pwd->pw_uid <= (uid_t) getdef_ulong ("LASTLOG_UID_MAX", 0xFFFFFFFFUL)
- 		    && (ll.ll_time != 0)) {
 --- a/lib/getdef.c
 +++ b/lib/getdef.c
 @@ -78,6 +78,7 @@

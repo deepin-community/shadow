@@ -9,9 +9,9 @@ Fixes: #166793
  #include <stdio.h>
  #include <signal.h>
 +#include <grp.h>
+ 
+ #include "alloc.h"
  #include "nscd.h"
- #include "sssd.h"
- #ifdef WITH_TCB
 @@ -970,12 +971,23 @@
  			goto fail;
  		}
