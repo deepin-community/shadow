@@ -17,6 +17,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := --without-libcrack \
 	--with-group-name-max-length=32 \
 	--without-acl \
 	--without-attr \
+	--without-libbsd \
 	--without-su \
 	--without-tcb \
 	 SHELL=/bin/sh
