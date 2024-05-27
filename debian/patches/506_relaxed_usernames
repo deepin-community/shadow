@@ -15,8 +15,8 @@ Details:
  than '-' as the leading character).  Thus, the maintenance tools don't
  anymore.  closes: #79682, #166798, #171179
 
---- a/libmisc/chkname.c
-+++ b/libmisc/chkname.c
+--- a/lib/chkname.c
++++ b/lib/chkname.c
 @@ -32,44 +32,26 @@
  	}
  

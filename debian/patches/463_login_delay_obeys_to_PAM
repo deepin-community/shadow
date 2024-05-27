@@ -10,8 +10,8 @@ Note: If removed, FAIL_DELAY must be re-added to /etc/login.defs
 --- a/src/login.c
 +++ b/src/login.c
 @@ -512,7 +512,6 @@
- #if !defined(USE_PAM)
  	char ptime[80];
+ #endif /* ENABLE_LASTLOG */
  #endif
 -	unsigned int delay;
  	unsigned int retries;
