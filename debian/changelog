@@ -1,4 +1,11 @@
-shadow (1:4.14+dfsg1-0deepin2) UNRELEASED; urgency=medium
+shadow (1:4.14+dfsg1-0deepin3) unstable; urgency=medium
+
+  * Use --enable-logind=yes --enable-lastlog configure flag
+  * Build-Depends add libltdl-dev pkgconf libsystemd-dev
+
+ -- LiChengGang <lichenggang@uniontech.com>  Tue, 28 May 2024 16:29:00 +0800
+
+shadow (1:4.14+dfsg1-0deepin2) unstable; urgency=medium
 
   * Use --without-libbsd configure flag
 

@@ -9,12 +9,12 @@
 #900_testsuite_groupmems
 #901_testsuite_gcov
 
-008_login_log_failure_in_FTMP
+#008_login_log_failure_in_FTMP
 401_cppw_src.dpatch
 # 402 should be merged in 401, but should be reviewed by SE Linux experts first
 402_cppw_selinux
-429_login_FAILLOG_ENAB
-463_login_delay_obeys_to_PAM
+#429_login_FAILLOG_ENAB
+#463_login_delay_obeys_to_PAM
 501_commonio_group_shadow
 502_debian_useradd_defaults
 503_shadowconfig.8

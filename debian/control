@@ -16,7 +16,10 @@ Build-Depends: debhelper-compat (= 13),
                libsemanage-dev [linux-any],
                itstool <!nodoc>,
                bison,
-               libaudit-dev [linux-any]
+               libaudit-dev [linux-any],
+	       libltdl-dev,
+               pkgconf,
+               libsystemd-dev
 Standards-Version: 4.6.1
 Vcs-Git: https://salsa.debian.org/debian/shadow.git -b master
 Vcs-Browser: https://salsa.debian.org/debian/shadow

@@ -20,6 +20,8 @@ DEB_CONFIGURE_EXTRA_FLAGS := --without-libcrack \
 	--without-libbsd \
 	--without-su \
 	--without-tcb \
+	--enable-logind=yes \
+	--enable-lastlog \
 	 SHELL=/bin/sh
 
 ifneq ($(filter nodoc,$(DEB_BUILD_PROFILES)),)
