@@ -1,3 +1,9 @@
+shadow (1:4.14+dfsg1-0deepin4) unstable; urgency=medium
+
+  * fix: Keep the username directory permission at 750. (pms: 282975).
+
+ -- liujianqiang <liujianqiang@uniontech.com>  Wed, 11 Dec 2024 11:28:47 +0800
+
 shadow (1:4.14+dfsg1-0deepin3) unstable; urgency=medium
 
   * Use --enable-logind=yes --enable-lastlog configure flag
