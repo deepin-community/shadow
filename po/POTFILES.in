@@ -13,9 +13,7 @@ lib/cleanup_user.c
 lib/commonio.c
 lib/console.c
 lib/copydir.c
-lib/date_to_str.c
 lib/encrypt.c
-lib/entry.c
 lib/env.c
 lib/failure.c
 lib/fields.c
@@ -27,7 +25,6 @@ lib/fputsx.c
 lib/get_gid.c
 lib/get_uid.c
 lib/getdef.c
-lib/getlong.c
 lib/getgr_nam_gid.c
 lib/getrange.c
 lib/groupio.c
@@ -56,7 +53,6 @@ lib/pwdcheck.c
 lib/pwio.c
 lib/pwmem.c
 lib/remove_tree.c
-lib/rlogin.c
 lib/root_flag.c
 lib/salt.c
 lib/selinux.c

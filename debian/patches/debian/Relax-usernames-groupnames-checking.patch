@@ -1,0 +1,123 @@
+From: Shadow package maintainers <pkg-shadow-devel@lists.alioth.debian.org>
+Date: Sat, 22 Jun 2024 17:39:41 +0200
+Subject: Relax usernames/groupnames checking
+
+Allows any non-empty user/grounames that don't contain ':', ',', '\\' or
+'\n' characters and don't start with '-', '+', or '~'. This patch is
+more restrictive than original Karl's version. closes: #264879 Also
+closes: #377844
+
+Comments from Karl Ramm (shadow 1:4.0.3-9, 20 Aug 2003 02:06:50 -0400):
+
+I can't come up with a good justification as to why characters other
+than ':'s and '\0's should be disallowed in group and usernames (other
+than '-' as the leading character).  Thus, the maintenance tools don't
+anymore.  closes: #79682, #166798, #171179
+
+Status wrt upstream: Debian specific. Not to be used upstream
+---
+ lib/chkname.c      | 47 +++++++++++++++--------------------------------
+ man/groupadd.8.xml |  6 ++++++
+ man/useradd.8.xml  |  8 ++++++++
+ 3 files changed, 29 insertions(+), 32 deletions(-)
+
+diff --git a/lib/chkname.c b/lib/chkname.c
+index 995562f..9954410 100644
+--- a/lib/chkname.c
++++ b/lib/chkname.c
+@@ -54,44 +54,27 @@ static bool is_valid_name (const char *name)
+ 	}
+ 
+ 	/*
+-         * User/group names must match BRE regex:
+-         *    [a-zA-Z0-9_.][a-zA-Z0-9_.-]*$\?
+-         *
+-         * as a non-POSIX, extension, allow "$" as the last char for
+-         * sake of Samba 3.x "add machine script"
+-         *
+-         * Also do not allow fully numeric names or just "." or "..".
+-         */
+-	int numeric;
+-
+-	if ('\0' == *name ||
+-	    ('.' == *name && (('.' == name[1] && '\0' == name[2]) ||
+-			      '\0' == name[1])) ||
+-	    !((*name >= 'a' && *name <= 'z') ||
+-	      (*name >= 'A' && *name <= 'Z') ||
+-	      (*name >= '0' && *name <= '9') ||
+-	      *name == '_' ||
+-	      *name == '.')) {
++	 * POSIX indicate that usernames are composed of characters from the
++	 * portable filename character set [A-Za-z0-9._-], and that the hyphen
++	 * should not be used as the first character of a portable user name.
++	 *
++	 * Allow more relaxed user/group names in Debian -- ^[^-~+:,\\\s][^:,\\\s]*$
++	 */
++	if (   ('\0' == *name)
++	    || ('-'  == *name)
++	    || ('~'  == *name)
++	    || ('+'  == *name)) {
+ 		return false;
+ 	}
+ 
+-	numeric = isdigit(*name);
+-
+-	while ('\0' != *++name) {
+-		if (!((*name >= 'a' && *name <= 'z') ||
+-		      (*name >= 'A' && *name <= 'Z') ||
+-		      (*name >= '0' && *name <= '9') ||
+-		      *name == '_' ||
+-		      *name == '.' ||
+-		      *name == '-' ||
+-		      (*name == '$' && name[1] == '\0')
+-		     )) {
++	do {
++		if ((':' == *name) || (',' == *name) || ('\\' == *name) || isspace(*name)) {
+ 			return false;
+ 		}
+-		numeric &= isdigit(*name);
+-	}
++		name++;
++	} while ('\0' != *name);
+ 
+-	return !numeric;
++	return true;
+ }
+ 
+ 
+diff --git a/man/groupadd.8.xml b/man/groupadd.8.xml
+index 61a548f..d472bd0 100644
+--- a/man/groupadd.8.xml
++++ b/man/groupadd.8.xml
+@@ -71,6 +71,12 @@
+        Fully numeric groupnames and groupnames . or .. are
+        also disallowed.
+      </para>
++     <para>
++       On Debian, the only constraints are that groupnames must neither start
++       with a dash ('-') nor plus ('+') nor tilde ('~') nor contain a
++       colon (':'), a comma (','), or a whitespace (space:' ',
++       end of line: '\n', tabulation: '\t', etc.).
++     </para>
+      <para>
+        Groupnames may only be up to &GROUP_NAME_MAX_LENGTH; characters long.
+      </para>
+diff --git a/man/useradd.8.xml b/man/useradd.8.xml
+index 17987a6..c98b214 100644
+--- a/man/useradd.8.xml
++++ b/man/useradd.8.xml
+@@ -735,6 +735,14 @@
+     <para>
+       Usernames may only be up to 256 characters long.
+     </para>
++    <para>
++      On Debian, the only constraints are that usernames must neither start
++      with a dash ('-') nor plus ('+') nor tilde ('~') nor contain a
++      colon (':'), a comma (','), or a whitespace (space: ' ',
++      end of line: '\n', tabulation: '\t', etc.). Note that using a slash
++      ('/') may break the default algorithm for the definition of the
++      user's home directory.
++    </para>
+   </refsect1>
+ 
+   <refsect1 id='configuration'>

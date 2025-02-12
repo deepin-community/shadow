@@ -1,0 +1,22 @@
+From: Chris Hofstaedtler <zeha@debian.org>
+Date: Sat, 6 Jul 2024 23:35:51 +0200
+Subject: tests/libsubid/04_nss: fix setting basedir
+
+---
+ tests/tests/libsubid/04_nss/Makefile | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/tests/libsubid/04_nss/Makefile b/tests/tests/libsubid/04_nss/Makefile
+index 79c2fc9..bf2699f 100644
+--- a/tests/tests/libsubid/04_nss/Makefile
++++ b/tests/tests/libsubid/04_nss/Makefile
+@@ -1,7 +1,7 @@
+ all: test_nss libsubid_zzz.so
+ 
+-BASE_TEST_DIR ?= $(shell git rev-parse --show-toplevel)
+-basedir := $(BASE_TEST_DIR)
++BUILD_BASE_DIR ?= $(shell git rev-parse --show-toplevel)
++basedir := $(BUILD_BASE_DIR)
+ 
+ test_nss: test_nss.c $(basedir)/lib/nss.c
+ 	gcc -c -I$(basedir)/lib/ -I$(basedir) -o test_nss.o test_nss.c

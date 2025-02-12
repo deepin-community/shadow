@@ -26,15 +26,22 @@
 #include <assert.h>
 
 #include "alloc.h"
+#include "attr.h"
+#include "chkname.h"
 #include "defines.h"
 #include "faillog.h"
 #include "failure.h"
 #include "getdef.h"
+#include "memzero.h"
 #include "prototypes.h"
 #include "pwauth.h"
 /*@-exitarg@*/
 #include "exitcodes.h"
 #include "shadowlog.h"
+#include "string/sprintf.h"
+#include "string/strftime.h"
+#include "string/strtcpy.h"
+
 
 #ifdef USE_PAM
 #include "pam_defs.h"
@@ -78,11 +85,6 @@ static struct lastlog ll;
 static bool pflg = false;
 static bool fflg = false;
 
-#ifdef RLOGIN
-static bool rflg = false;
-#else				/* RLOGIN */
-#define rflg false
-#endif				/* !RLOGIN */
 static bool hflg = false;
 static bool preauth_flag = false;
 
@@ -127,7 +129,6 @@ static void exit_handler (int);
  * usage - print login command usage and exit
  *
  * login [ name ]
- * login -r hostname	(for rlogind)
  * login -h hostname	(for telnetd, etc.)
  * login -f name	(for pre-authenticated login: datakit, xterm, etc.)
  */
@@ -138,9 +139,6 @@ static void usage (void)
 		exit (1);
 	}
 	fprintf (stderr, _("       %s [-p] [-h host] [-f name]\n"), Prog);
-#ifdef RLOGIN
-	fprintf (stderr, _("       %s [-p] -r host\n"), Prog);
-#endif				/* RLOGIN */
 	exit (1);
 }
 
@@ -264,7 +262,7 @@ static void process_flags (int argc, char *const *argv)
 	/*
 	 * Check the flags for proper form. Every argument starting with
 	 * "-" must be exactly two characters long. This closes all the
-	 * clever rlogin, telnet, and getty holes.
+	 * clever telnet, and getty holes.
 	 */
 	for (arg = 1; arg < argc; arg++) {
 		if (argv[arg][0] == '-' && strlen (argv[arg]) > 2) {
@@ -291,13 +289,6 @@ static void process_flags (int argc, char *const *argv)
 			hostname = optarg;
 			reason = PW_TELNET;
 			break;
-#ifdef	RLOGIN
-		case 'r':
-			rflg = true;
-			hostname = optarg;
-			reason = PW_RLOGIN;
-			break;
-#endif				/* RLOGIN */
 		case 'p':
 			pflg = true;
 			break;
@@ -306,21 +297,11 @@ static void process_flags (int argc, char *const *argv)
 		}
 	}
 
-#ifdef RLOGIN
-	/*
-	 * Neither -h nor -f should be combined with -r.
-	 */
-
-	if (rflg && (hflg || fflg)) {
-		usage ();
-	}
-#endif				/* RLOGIN */
-
 	/*
 	 * Allow authentication bypass only if real UID is zero.
 	 */
 
-	if ((rflg || fflg || hflg) && !amroot) {
+	if ((fflg || hflg) && !amroot) {
 		fprintf (stderr, _("%s: Permission denied.\n"), Prog);
 		exit (1);
 	}
@@ -335,11 +316,6 @@ static void process_flags (int argc, char *const *argv)
 		++optind;
 	}
 
-#ifdef	RLOGIN
-	if (rflg && (NULL != username)) {
-		usage ();
-	}
-#endif				/* RLOGIN */
 	if (fflg && (NULL == username)) {
 		usage ();
 	}
@@ -393,14 +369,14 @@ static void init_env (void)
 #endif				/* !USE_PAM */
 }
 
-static void exit_handler (unused int sig)
+static void exit_handler (MAYBE_UNUSED int sig)
 {
 	_exit (0);
 }
 
-static void alarm_handler (unused int sig)
+static void alarm_handler (MAYBE_UNUSED int sig)
 {
-	write_full (STDERR_FILENO, tmsg, strlen (tmsg));
+	write_full(STDERR_FILENO, tmsg, strlen(tmsg));
 	signal(SIGALRM, exit_handler);
 	alarm(2);
 }
@@ -467,46 +443,38 @@ static /*@observer@*/const char *get_failent_user (/*@returned@*/const char *use
  *	the flags which login supports are
  *
  *	-p - preserve the environment
- *	-r - perform autologin protocol for rlogin
  *	-f - do not perform authentication, user is preauthenticated
  *	-h - the name of the remote host
  */
 int main (int argc, char **argv)
 {
-	const char *tmptty;
-	char tty[BUFSIZ];
+	int            err;
+	bool           subroot = false;
+	char           **envp = environ;
+	char           *host = NULL;
+	char           tty[BUFSIZ];
+	char           fromhost[512];
+	const char     *failent_user;
+	const char     *tmptty;
+	const char     *cp;
+	const char     *tmp;
+	unsigned int   delay;
+	unsigned int   retries;
+	unsigned int   timeout;
+	struct passwd  *pwd = NULL;
 
-#ifdef RLOGIN
-	char term[128] = "";
-#endif				/* RLOGIN */
-#if !defined(USE_PAM)
-#ifdef ENABLE_LASTLOG
-	char ptime[80];
-#endif /* ENABLE_LASTLOG */
-#endif
-	unsigned int delay;
-	unsigned int retries;
-	bool subroot = false;
-#ifndef USE_PAM
-	bool is_console;
-#endif
-	int err;
-	unsigned int timeout;
-	const char *cp;
-	const char *tmp;
-	char fromhost[512];
-	struct passwd *pwd = NULL;
-	char **envp = environ;
-	const char *failent_user;
-	char *host = NULL;
-
-#ifdef USE_PAM
-	int retcode;
-	pid_t child;
-	char *pam_user = NULL;
+#if defined(USE_PAM)
+	int            retcode;
+	char           *pam_user = NULL;
+	pid_t          child;
 #else
+	bool is_console;
 	struct spwd *spwd = NULL;
+# if defined(ENABLE_LASTLOG)
+	char           ptime[80];
+# endif
 #endif
+
 	/*
 	 * Some quick initialization.
 	 */
@@ -550,13 +518,13 @@ int main (int argc, char **argv)
 	if (NULL == tmptty) {
 		tmptty = "UNKNOWN";
 	}
-	STRFCPY (tty, tmptty);
+	STRTCPY(tty, tmptty);
 
 #ifndef USE_PAM
 	is_console = console (tty);
 #endif
 
-	if (rflg || hflg) {
+	if (hflg) {
 		/*
 		 * Add remote hostname to the environment. I think
 		 * (not sure) I saw it once on Irix.  --marekm
@@ -569,22 +537,6 @@ int main (int argc, char **argv)
 	if (hflg) {
 		reason = PW_RLOGIN;
 	}
-#ifdef RLOGIN
-	if (rflg) {
-		size_t  max_size = sysconf(_SC_LOGIN_NAME_MAX);
-
-		assert (NULL == username);
-		username = XMALLOC(max_size, char);
-		username[max_size - 1] = '\0';
-		if (do_rlogin(hostname, username, max_size, term, sizeof(term)))
-		{
-			preauth_flag = true;
-		} else {
-			free (username);
-			username = NULL;
-		}
-	}
-#endif				/* RLOGIN */
 
 	OPENLOG (Prog);
 
@@ -619,18 +571,11 @@ int main (int argc, char **argv)
 		}
 	}
 
-#ifdef RLOGIN
-	if (term[0] != '\0') {
-		addenv ("TERM", term);
-	} else
-#endif				/* RLOGIN */
-	{
-		/* preserve TERM from getty */
-		if (!pflg) {
-			tmp = getenv ("TERM");
-			if (NULL != tmp) {
-				addenv ("TERM", tmp);
-			}
+	/* preserve TERM from getty */
+	if (!pflg) {
+		tmp = getenv ("TERM");
+		if (NULL != tmp) {
+			addenv ("TERM", tmp);
 		}
 	}
 
@@ -640,7 +585,7 @@ int main (int argc, char **argv)
 		set_env (argc - optind, &argv[optind]);
 	}
 
-	if (rflg || hflg) {
+	if (hflg) {
 		cp = hostname;
 	} else if ((host != NULL) && (host[0] != '\0')) {
 		cp = host;
@@ -649,19 +594,16 @@ int main (int argc, char **argv)
 	}
 
 	if ('\0' != *cp) {
-		snprintf (fromhost, sizeof fromhost,
-		          " on '%.100s' from '%.200s'", tty, cp);
+		SNPRINTF(fromhost, " on '%.100s' from '%.200s'", tty, cp);
 	} else {
-		snprintf (fromhost, sizeof fromhost,
-		          " on '%.100s'", tty);
+		SNPRINTF(fromhost, " on '%.100s'", tty);
 	}
 	free(host);
 
       top:
 	/* only allow ALARM sec. for login */
 	timeout = getdef_unum ("LOGIN_TIMEOUT", ALARM);
-	snprintf (tmsg, sizeof tmsg,
-	          _("\nLogin timed out after %u seconds.\n"), timeout);
+	SNPRINTF(tmsg, _("\nLogin timed out after %u seconds.\n"), timeout);
 	(void) signal (SIGALRM, alarm_handler);
 	if (timeout > 0) {
 		(void) alarm (timeout);
@@ -700,18 +642,15 @@ int main (int argc, char **argv)
 #endif
 	/* if fflg, then the user has already been authenticated */
 	if (!fflg) {
-		unsigned int failcount = 0;
-		char hostn[256];
-		char loginprompt[256];	/* That's one hell of a prompt :) */
+		char          hostn[256];
+		char          loginprompt[256]; //That's one hell of a prompt :)
+		unsigned int  failcount = 0;
 
 		/* Make the login prompt look like we want it */
 		if (gethostname (hostn, sizeof (hostn)) == 0) {
-			snprintf (loginprompt,
-			          sizeof (loginprompt),
-			          _("%s login: "), hostn);
+			SNPRINTF(loginprompt, _("%s login: "), hostn);
 		} else {
-			strncpy (loginprompt, _("login: "),
-			         sizeof (loginprompt));
+			STRTCPY(loginprompt, _("login: "));
 		}
 
 		retcode = pam_set_item (pamh, PAM_USER_PROMPT, loginprompt);
@@ -886,8 +825,9 @@ int main (int argc, char **argv)
 
 		failed = false;	/* haven't failed authentication yet */
 		if (NULL == username) {	/* need to get a login id */
-			size_t  max_size = sysconf(_SC_LOGIN_NAME_MAX);
+			size_t  max_size;
 
+			max_size = login_name_max_size();
 			if (subroot) {
 				closelog ();
 				exit (1);
@@ -955,7 +895,7 @@ int main (int argc, char **argv)
 		}
 
 		/*
-		 * The -r and -f flags provide a name which has already
+		 * The -f flag provides a name which has already
 		 * been authenticated by some server.
 		 */
 		if (preauth_flag) {
@@ -1044,8 +984,8 @@ int main (int argc, char **argv)
 
 		(void) puts (_("Login incorrect"));
 
-		/* allow only one attempt with -r or -f */
-		if (rflg || fflg || (retries <= 0)) {
+		/* allow only one attempt with -f */
+		if (fflg || (retries <= 0)) {
 			closelog ();
 			exit (1);
 		}
@@ -1255,12 +1195,13 @@ int main (int argc, char **argv)
 #ifdef ENABLE_LASTLOG
 		if (   getdef_bool ("LASTLOG_ENAB")
 		    && pwd->pw_uid <= (uid_t) getdef_ulong ("LASTLOG_UID_MAX", 0xFFFFFFFFUL)
-		    && (ll.ll_time != 0)) {
-			time_t ll_time = ll.ll_time;
+		    && (ll.ll_time != 0))
+		{
+			time_t     ll_time = ll.ll_time;
+			struct tm  tm;
 
-			(void) strftime (ptime, sizeof (ptime),
-			                 "%a %b %e %H:%M:%S %z %Y",
-			                 localtime (&ll_time));
+			localtime_r(&ll_time, &tm);
+			STRFTIME(ptime, "%a %b %e %H:%M:%S %z %Y", &tm);
 			printf (_("Last login: %s on %s"),
 			        ptime, ll.ll_line);
 #ifdef HAVE_LL_HOST		/* __linux__ || SUN4 */

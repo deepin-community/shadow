@@ -1,0 +1,148 @@
+From: Serge Hallyn <serge@hallyn.com>
+Date: Sat, 25 May 2024 08:40:11 -0500
+Subject: tests/: Support run_some from exported tarball
+
+common/config.sh currently tries to find the top directory by looking
+for .git.  There are also many places under tests/ where we use
+hard-coded ../../.. to find things like ${TOP_DIR}/lib.
+
+We don't actually ship the tests with 'make dist'.  So we will
+be exporting tests/ as a separate tarball.  In particular, I want
+to then import this in the debian package.  However, there it will
+be under shadow.git/debian/tests, not shadow.git/tests.
+
+To support this, accept the environment variable BUILD_BASE_DIR,
+which should point to shadow.git.
+
+An alternative would be to move the tests to their own git
+tree.  However, keeping tests in separate git tree tends to
+lead to repos getting out of sync.  And we'd still need to accept
+something like BUILD_BASE_DIR.
+
+Note there are a lot of tests under run-all, which I'm not converting
+as they currently are not being run in CI, so I'm more likely to
+break something.
+
+Changelog:
+  2024 05 26: Incorporate feedback from alejandro-colomar
+
+Link: <https://salsa.debian.org/debian/shadow/-/merge_requests/21>
+Link: <https://salsa.debian.org/debian/shadow/-/merge_requests/22>
+Cc: Chris Hofstaedtler <zeha@debian.org>
+Signed-off-by: Serge Hallyn <serge@hallyn.com>
+Signed-off-by: Alejandro Colomar <alx@kernel.org>
+---
+ tests/tests/common/config.sh              | 16 +++++++++-------
+ tests/tests/libsubid/04_nss/Makefile      | 13 ++++++++-----
+ tests/tests/libsubid/04_nss/subidnss.test |  2 +-
+ tests/tests/libsubid/04_nss/test_range    | 12 ++++++------
+ 4 files changed, 24 insertions(+), 19 deletions(-)
+
+diff --git a/tests/tests/common/config.sh b/tests/tests/common/config.sh
+index a2f8df0..926cdae 100644
+--- a/tests/tests/common/config.sh
++++ b/tests/tests/common/config.sh
+@@ -2,14 +2,16 @@
+ 
+ set -e
+ 
+-build_path=$(pwd)
+-while [ "${build_path}" != "/" -a ! -e "${build_path}/.git" ]; do
+-	build_path=$(dirname ${build_path})
+-done
+-if [ ! -e "${build_path}/.git" ]; then
+-	echo "Not inside git directory" 1>&2
+-	exit 1
++if [ -n "${BUILD_BASE_DIR}" ]; then
++    build_path="${BUILD_BASE_DIR}"
++else
++    build_path=$(git rev-parse --show-toplevel)
+ fi
++if [ -z "${build_path}" ]; then
++    echo "Failed to find build base path"
++    exit 1
++fi
++export build_path
+ 
+ # Save the configuration files in tmp.
+ save_config ()
+diff --git a/tests/tests/libsubid/04_nss/Makefile b/tests/tests/libsubid/04_nss/Makefile
+index dd5acf7..79c2fc9 100644
+--- a/tests/tests/libsubid/04_nss/Makefile
++++ b/tests/tests/libsubid/04_nss/Makefile
+@@ -1,12 +1,15 @@
+ all: test_nss libsubid_zzz.so
+ 
+-test_nss: test_nss.c ../../../lib/nss.c
+-	gcc -c -I../../../lib/ -I../../.. -o test_nss.o test_nss.c
+-	gcc -o test_nss test_nss.o ../../../lib/.libs/libshadow.a -ldl
++BASE_TEST_DIR ?= $(shell git rev-parse --show-toplevel)
++basedir := $(BASE_TEST_DIR)
++
++test_nss: test_nss.c $(basedir)/lib/nss.c
++	gcc -c -I$(basedir)/lib/ -I$(basedir) -o test_nss.o test_nss.c
++	gcc -o test_nss test_nss.o $(basedir)/lib/.libs/libshadow.a -ldl
+ 
+ libsubid_zzz.so: libsubid_zzz.c
+-	gcc -c -I../../../lib/ -I../../.. -I../../../libsubid libsubid_zzz.c
+-	gcc -L../../../libsubid -shared -o libsubid_zzz.so libsubid_zzz.o ../../../lib/.libs/libshadow.a -ldl
++	gcc -c -I$(basedir)/lib/ -I$(basedir) -I$(basedir)/libsubid libsubid_zzz.c
++	gcc -L$(basedir)/libsubid -shared -o libsubid_zzz.so libsubid_zzz.o $(basedir)/lib/.libs/libshadow.a -ldl
+ 
+ clean:
+ 	rm -f *.o *.so test_nss
+diff --git a/tests/tests/libsubid/04_nss/subidnss.test b/tests/tests/libsubid/04_nss/subidnss.test
+index 3d40dc8..400171f 100755
+--- a/tests/tests/libsubid/04_nss/subidnss.test
++++ b/tests/tests/libsubid/04_nss/subidnss.test
+@@ -9,7 +9,7 @@ cd $(dirname $0)
+ 
+ make
+ 
+-export LD_LIBRARY_PATH=.:../../../lib/.libs:$LD_LIBRARY_PATH
++export LD_LIBRARY_PATH=.:${build_path}/lib/.libs:$LD_LIBRARY_PATH
+ 
+ ./test_nss 1
+ ./test_nss 2
+diff --git a/tests/tests/libsubid/04_nss/test_range b/tests/tests/libsubid/04_nss/test_range
+index ee25080..45a791c 100755
+--- a/tests/tests/libsubid/04_nss/test_range
++++ b/tests/tests/libsubid/04_nss/test_range
+@@ -11,23 +11,23 @@ cleanup1() {
+     umount /etc/nsswitch.conf
+ }
+ trap cleanup1 EXIT HUP INT TERM
+-../../../src/check_subid_range user1 u 100000 65535
++${build_path}/src/check_subid_range user1 u 100000 65535
+ if [ $? -ne 0 ]; then
+     exit 1
+ fi
+-../../../src/check_subid_range user2 u 100000 65535
++${build_path}/src/check_subid_range user2 u 100000 65535
+ if [ $? -eq 0 ]; then
+     exit 1
+ fi
+-../../../src/check_subid_range unknown u 100000 65535
++${build_path}/src/check_subid_range unknown u 100000 65535
+ if [ $? -eq 0 ]; then
+     exit 1
+ fi
+-../../../src/check_subid_range error u 100000 65535
++${build_path}/src/check_subid_range error u 100000 65535
+ if [ $? -eq 0 ]; then
+     exit 1
+ fi
+-../../../src/check_subid_range user1 u 1000 65535
++${build_path}/src/check_subid_range user1 u 1000 65535
+ if [ $? -eq 0 ]; then
+     exit 1
+ fi
+@@ -43,7 +43,7 @@ cleanup2() {
+     umount /etc/nsswitch.conf
+ }
+ trap cleanup2 EXIT HUP INT TERM
+-../../../src/check_subid_range user1 u 100000 65535
++${build_path}/src/check_subid_range user1 u 100000 65535
+ if [ $? -eq 0 ]; then
+     exit 1
+ fi

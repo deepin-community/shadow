@@ -24,14 +24,27 @@ libshadow_la_LIBADD = $(LIBADD_DLOPEN)
 
 libshadow_la_SOURCES = \
 	addgrps.c \
+	adds.c \
+	adds.h \
 	age.c \
 	agetpass.c \
+	agetpass.h \
 	alloc.c \
 	alloc.h \
+	atoi/a2i.c \
+	atoi/a2i.h \
+	atoi/str2i.c \
+	atoi/str2i.h \
+	atoi/strtoi.c \
+	atoi/strtoi.h \
+	atoi/strtou_noneg.c \
+	atoi/strtou_noneg.h \
+	attr.h \
 	audit_help.c \
 	basename.c \
 	bit.c \
 	bit.h \
+	cast.h \
 	chkname.c \
 	chkname.h \
 	chowndir.c \
@@ -44,10 +57,8 @@ libshadow_la_SOURCES = \
 	console.c \
 	copydir.c \
 	csrand.c \
-	date_to_str.c \
 	defines.h \
 	encrypt.c \
-	entry.c \
 	env.c \
 	exitcodes.h \
 	faillog.h \
@@ -67,11 +78,9 @@ libshadow_la_SOURCES = \
 	getdate.y \
 	getdef.c \
 	getdef.h \
-	getlong.c \
 	getgr_nam_gid.c \
 	getrange.c \
 	gettime.c \
-	getulong.c \
 	groupio.c \
 	groupmem.c \
 	groupio.h \
@@ -85,9 +94,10 @@ libshadow_la_SOURCES = \
 	lockpw.c \
 	loginprompt.c \
 	mail.c \
-	mempcpy.c \
-	mempcpy.h \
+	memzero.c \
+	memzero.h \
 	motd.c \
+	must_be.h \
 	myname.c \
 	nss.c \
 	nscd.c \
@@ -109,7 +119,6 @@ libshadow_la_SOURCES = \
 	pwdcheck.c \
 	pwmem.c \
 	remove_tree.c \
-	rlogin.c \
 	root_flag.c \
 	run_part.h \
 	run_part.c \
@@ -131,18 +140,29 @@ libshadow_la_SOURCES = \
 	shadowlog_internal.h \
 	shadowmem.c \
 	shell.c \
+	sizeof.h \
 	spawn.c \
 	sssd.c \
 	sssd.h \
-	stpecpy.c \
-	stpecpy.h \
-	stpeprintf.c \
-	stpeprintf.h \
+	string/sprintf.c \
+	string/sprintf.h \
+	string/stpecpy.c \
+	string/stpecpy.h \
+	string/stpeprintf.c \
+	string/stpeprintf.h \
+	string/strftime.c \
+	string/strftime.h \
+	string/strncpy.h \
+	string/strtcpy.c \
+	string/strtcpy.h \
+	string/zustr2stp.h \
 	strtoday.c \
 	sub.c \
 	subordinateio.h \
 	subordinateio.c \
 	sulog.c \
+	time/day_to_str.c \
+	time/day_to_str.h \
 	ttytype.c \
 	tz.c \
 	ulimit.c \

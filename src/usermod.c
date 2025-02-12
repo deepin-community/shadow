@@ -27,16 +27,19 @@
 #endif				/* USE_PAM */
 #endif				/* ACCT_TOOLS_SETUID */
 #include <stdio.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 
 #include "alloc.h"
+#include "atoi/str2i.h"
 #include "chkname.h"
 #include "defines.h"
 #include "faillog.h"
 #include "getdef.h"
 #include "groupio.h"
+#include "memzero.h"
 #include "nscd.h"
 #include "sssd.h"
 #include "prototypes.h"
@@ -56,6 +59,9 @@
 #include "tcbfuncs.h"
 #endif
 #include "shadowlog.h"
+#include "string/sprintf.h"
+#include "time/day_to_str.h"
+
 
 /*
  * exit status values
@@ -172,10 +178,12 @@ NORETURN static void usage (int status);
 static void new_pwent (struct passwd *);
 static void new_spent (struct spwd *);
 NORETURN static void fail_exit (int);
-static void update_group (void);
+static void update_group_file(void);
+static void update_group(const struct group *grp);
 
 #ifdef SHADOWGRP
-static void update_gshadow (void);
+static void update_gshadow_file(void);
+static void update_gshadow(const struct sgrp *sgrp);
 #endif
 static void grp_update (void);
 
@@ -258,20 +266,6 @@ static int get_groups (char *list)
 			continue;
 		}
 
-#ifdef	USE_NIS
-		/*
-		 * Don't add this group if they are an NIS group. Tell the
-		 * user to go to the server for this group.
-		 */
-		if (__isgrNIS ()) {
-			fprintf (stderr,
-			         _("%s: group '%s' is a NIS group.\n"),
-			         Prog, grp->gr_name);
-			gr_free (grp);
-			continue;
-		}
-#endif
-
 		if (ngroups == sys_ngroups) {
 			fprintf (stderr,
 			         _("%s: too many groups specified (max %d).\n"),
@@ -314,21 +308,28 @@ static struct ulong_range getulong_range(const char *str)
 
 	errno = 0;
 	first = strtoll(str, &pos, 10);
-	if (('\0' == *str) || ('-' != *pos ) || (ERANGE == errno) ||
-	    (first != (unsigned long int)first))
+	if (('\0' == *str) || ('-' != *pos ) || (0 != errno) ||
+	    (first != (unsigned long)first))
 		goto out;
 
 	errno = 0;
 	last = strtoll(pos + 1, &pos, 10);
-	if (('\0' != *pos ) || (ERANGE == errno) ||
-	    (last != (unsigned long int)last))
+	if (('\0' != *pos ) || (0 != errno) ||
+	    (last != (unsigned long)last))
 		goto out;
 
 	if (first > last)
 		goto out;
 
-	result.first = (unsigned long int)first;
-	result.last = (unsigned long int)last;
+	/*
+	 * uid_t in linux is an unsigned int, anything over this is an invalid
+	 * range will be later refused anyway by get_map_ranges().
+	 */
+	if (first > UINT_MAX || last > UINT_MAX)
+		goto out;
+
+	result.first = (unsigned long)first;
+	result.last = (unsigned long)last;
 out:
 	return result;
 }
@@ -588,8 +589,9 @@ static void new_spent (struct spwd *spent)
 	if (eflg) {
 		/* log dates rather than numbers of days. */
 		char new_exp[16], old_exp[16];
-		date_to_str (sizeof(new_exp), new_exp, user_newexpire * DAY);
-		date_to_str (sizeof(old_exp), old_exp, user_expire * DAY);
+
+		DAY_TO_STR(new_exp, user_newexpire);
+		DAY_TO_STR(old_exp, user_expire);
 #ifdef WITH_AUDIT
 		audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
 		              "changing expiration date",
@@ -685,262 +687,276 @@ fail_exit (int code)
 }
 
 
-static void update_group (void)
+static void
+update_group_file(void)
 {
-	bool is_member;
-	bool was_member;
-	bool changed;
-	const struct group *grp;
-	struct group *ngrp;
-
-	changed = false;
+	const struct group  *grp;
 
 	/*
 	 * Scan through the entire group file looking for the groups that
 	 * the user is a member of.
 	 */
-	while ((grp = gr_next ()) != NULL) {
-		/*
-		 * See if the user specified this group as one of their
-		 * concurrent groups.
-		 */
-		was_member = is_on_list (grp->gr_mem, user_name);
-		is_member = Gflg && (   (was_member && aflg)
-		                     || is_on_list (user_groups, grp->gr_name));
+	while ((grp = gr_next()) != NULL)
+		update_group(grp);
+}
 
-		if (!was_member && !is_member) {
-			continue;
-		}
 
-		/*
-		* If rflg+Gflg  is passed in AKA -rG invert is_member flag, which removes
-		* mentioned groups while leaving the others.
-		*/
-		if (Gflg && rflg) {
-			is_member = !is_member;
-		}
+static void
+update_group(const struct group *grp)
+{
+	bool          changed;
+	bool          is_member;
+	bool          was_member;
+	struct group  *ngrp;
 
-		ngrp = __gr_dup (grp);
-		if (NULL == ngrp) {
-			fprintf (stderr,
-			         _("%s: Out of memory. Cannot update %s.\n"),
-			         Prog, gr_dbname ());
-			fail_exit (E_GRP_UPDATE);
-		}
+	changed = false;
 
-		if (was_member) {
-			if ((!Gflg) || is_member) {
-				/* User was a member and is still a member
-				 * of this group.
-				 * But the user might have been renamed.
-				 */
-				if (lflg) {
-					ngrp->gr_mem = del_list (ngrp->gr_mem,
-					                         user_name);
-					ngrp->gr_mem = add_list (ngrp->gr_mem,
-					                         user_newname);
-					changed = true;
-#ifdef WITH_AUDIT
-					audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-					              "changing group member",
-					              user_newname, AUDIT_NO_ID, 1);
-#endif
-					SYSLOG ((LOG_INFO,
-					         "change '%s' to '%s' in group '%s'",
-					         user_name, user_newname,
-					         ngrp->gr_name));
-				}
-			} else {
-				/* User was a member but is no more a
-				 * member of this group.
-				 */
-				ngrp->gr_mem = del_list (ngrp->gr_mem, user_name);
+	/*
+	 * See if the user specified this group as one of their
+	 * concurrent groups.
+	 */
+	was_member = is_on_list (grp->gr_mem, user_name);
+	is_member = Gflg && (   (was_member && aflg)
+			     || is_on_list (user_groups, grp->gr_name));
+
+	if (!was_member && !is_member)
+		return;
+
+	/*
+	* If rflg+Gflg  is passed in AKA -rG invert is_member flag, which removes
+	* mentioned groups while leaving the others.
+	*/
+	if (Gflg && rflg) {
+		is_member = !is_member;
+	}
+
+	ngrp = __gr_dup (grp);
+	if (NULL == ngrp) {
+		fprintf (stderr,
+			 _("%s: Out of memory. Cannot update %s.\n"),
+			 Prog, gr_dbname ());
+		fail_exit (E_GRP_UPDATE);
+	}
+
+	if (was_member) {
+		if ((!Gflg) || is_member) {
+			/* User was a member and is still a member
+			 * of this group.
+			 * But the user might have been renamed.
+			 */
+			if (lflg) {
+				ngrp->gr_mem = del_list (ngrp->gr_mem,
+							 user_name);
+				ngrp->gr_mem = add_list (ngrp->gr_mem,
+							 user_newname);
 				changed = true;
 #ifdef WITH_AUDIT
 				audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-				              "removing group member",
-				              user_name, AUDIT_NO_ID, 1);
+					      "changing group member",
+					      user_newname, AUDIT_NO_ID, 1);
 #endif
 				SYSLOG ((LOG_INFO,
-				         "delete '%s' from group '%s'",
-				         user_name, ngrp->gr_name));
+					 "change '%s' to '%s' in group '%s'",
+					 user_name, user_newname,
+					 ngrp->gr_name));
 			}
-		} else if (is_member) {
-			/* User was not a member but is now a member this
-			 * group.
+		} else {
+			/* User was a member but is no more a
+			 * member of this group.
 			 */
-			ngrp->gr_mem = add_list (ngrp->gr_mem, user_newname);
+			ngrp->gr_mem = del_list (ngrp->gr_mem, user_name);
 			changed = true;
 #ifdef WITH_AUDIT
 			audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-			              "adding user to group",
-			              user_name, AUDIT_NO_ID, 1);
+				      "removing group member",
+				      user_name, AUDIT_NO_ID, 1);
 #endif
-			SYSLOG ((LOG_INFO, "add '%s' to group '%s'",
-			         user_newname, ngrp->gr_name));
+			SYSLOG ((LOG_INFO,
+				 "delete '%s' from group '%s'",
+				 user_name, ngrp->gr_name));
 		}
-		if (!changed) {
-			continue;
-		}
-
-		changed = false;
-		if (gr_update (ngrp) == 0) {
-			fprintf (stderr,
-			         _("%s: failed to prepare the new %s entry '%s'\n"),
-			         Prog, gr_dbname (), ngrp->gr_name);
-			SYSLOG ((LOG_WARN, "failed to prepare the new %s entry '%s'", gr_dbname (), ngrp->gr_name));
-			fail_exit (E_GRP_UPDATE);
-		}
-
-		gr_free(ngrp);
+	} else if (is_member) {
+		/* User was not a member but is now a member this
+		 * group.
+		 */
+		ngrp->gr_mem = add_list (ngrp->gr_mem, user_newname);
+		changed = true;
+#ifdef WITH_AUDIT
+		audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
+			      "adding user to group",
+			      user_name, AUDIT_NO_ID, 1);
+#endif
+		SYSLOG ((LOG_INFO, "add '%s' to group '%s'",
+			 user_newname, ngrp->gr_name));
 	}
+	if (!changed)
+		goto free_ngrp;
+
+	if (gr_update (ngrp) == 0) {
+		fprintf (stderr,
+			 _("%s: failed to prepare the new %s entry '%s'\n"),
+			 Prog, gr_dbname (), ngrp->gr_name);
+		SYSLOG ((LOG_WARN, "failed to prepare the new %s entry '%s'", gr_dbname (), ngrp->gr_name));
+		fail_exit (E_GRP_UPDATE);
+	}
+
+free_ngrp:
+	gr_free(ngrp);
 }
 
-#ifdef SHADOWGRP
-static void update_gshadow (void)
-{
-	bool is_member;
-	bool was_member;
-	bool was_admin;
-	bool changed;
-	const struct sgrp *sgrp;
-	struct sgrp *nsgrp;
 
-	changed = false;
+#ifdef SHADOWGRP
+static void
+update_gshadow_file(void)
+{
+	const struct sgrp  *sgrp;
 
 	/*
 	 * Scan through the entire shadow group file looking for the groups
 	 * that the user is a member of.
 	 */
-	while ((sgrp = sgr_next ()) != NULL) {
+	while ((sgrp = sgr_next()) != NULL)
+		update_gshadow(sgrp);
+}
+#endif				/* SHADOWGRP */
 
-		/*
-		 * See if the user was a member of this group
+
+#ifdef SHADOWGRP
+static void
+update_gshadow(const struct sgrp *sgrp)
+{
+	bool         changed;
+	bool         is_member;
+	bool         was_member;
+	bool         was_admin;
+	struct sgrp  *nsgrp;
+
+	changed = false;
+
+	/*
+	 * See if the user was a member of this group
+	 */
+	was_member = is_on_list (sgrp->sg_mem, user_name);
+
+	/*
+	 * See if the user was an administrator of this group
+	 */
+	was_admin = is_on_list (sgrp->sg_adm, user_name);
+
+	/*
+	 * See if the user specified this group as one of their
+	 * concurrent groups.
+	 */
+	is_member = Gflg && (   (was_member && aflg)
+			     || is_on_list (user_groups, sgrp->sg_name));
+
+	if (!was_member && !was_admin && !is_member)
+		return;
+
+	/*
+	* If rflg+Gflg  is passed in AKA -rG invert is_member, to remove targeted
+	* groups while leaving the user apart of groups not mentioned
+	*/
+	if (Gflg && rflg) {
+		is_member = !is_member;
+	}
+
+	nsgrp = __sgr_dup (sgrp);
+	if (NULL == nsgrp) {
+		fprintf (stderr,
+			 _("%s: Out of memory. Cannot update %s.\n"),
+			 Prog, sgr_dbname ());
+		fail_exit (E_GRP_UPDATE);
+	}
+
+	if (was_admin && lflg) {
+		/* User was an admin of this group but the user
+		 * has been renamed.
 		 */
-		was_member = is_on_list (sgrp->sg_mem, user_name);
+		nsgrp->sg_adm = del_list (nsgrp->sg_adm, user_name);
+		nsgrp->sg_adm = add_list (nsgrp->sg_adm, user_newname);
+		changed = true;
+#ifdef WITH_AUDIT
+		audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
+			      "changing admin name in shadow group",
+			      user_name, AUDIT_NO_ID, 1);
+#endif
+		SYSLOG ((LOG_INFO,
+			 "change admin '%s' to '%s' in shadow group '%s'",
+			 user_name, user_newname, nsgrp->sg_name));
+	}
 
-		/*
-		 * See if the user was an administrator of this group
-		 */
-		was_admin = is_on_list (sgrp->sg_adm, user_name);
-
-		/*
-		 * See if the user specified this group as one of their
-		 * concurrent groups.
-		 */
-		is_member = Gflg && (   (was_member && aflg)
-		                     || is_on_list (user_groups, sgrp->sg_name));
-
-		if (!was_member && !was_admin && !is_member) {
-			continue;
-		}
-
-		/*
-		* If rflg+Gflg  is passed in AKA -rG invert is_member, to remove targeted
-		* groups while leaving the user apart of groups not mentioned
-		*/
-		if (Gflg && rflg) {
-			is_member = !is_member;
-		}
-
-		nsgrp = __sgr_dup (sgrp);
-		if (NULL == nsgrp) {
-			fprintf (stderr,
-			         _("%s: Out of memory. Cannot update %s.\n"),
-			         Prog, sgr_dbname ());
-			fail_exit (E_GRP_UPDATE);
-		}
-
-		if (was_admin && lflg) {
-			/* User was an admin of this group but the user
-			 * has been renamed.
+	if (was_member) {
+		if ((!Gflg) || is_member) {
+			/* User was a member and is still a member
+			 * of this group.
+			 * But the user might have been renamed.
 			 */
-			nsgrp->sg_adm = del_list (nsgrp->sg_adm, user_name);
-			nsgrp->sg_adm = add_list (nsgrp->sg_adm, user_newname);
-			changed = true;
-#ifdef WITH_AUDIT
-			audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-			              "changing admin name in shadow group",
-			              user_name, AUDIT_NO_ID, 1);
-#endif
-			SYSLOG ((LOG_INFO,
-			         "change admin '%s' to '%s' in shadow group '%s'",
-			         user_name, user_newname, nsgrp->sg_name));
-		}
-
-		if (was_member) {
-			if ((!Gflg) || is_member) {
-				/* User was a member and is still a member
-				 * of this group.
-				 * But the user might have been renamed.
-				 */
-				if (lflg) {
-					nsgrp->sg_mem = del_list (nsgrp->sg_mem,
-					                          user_name);
-					nsgrp->sg_mem = add_list (nsgrp->sg_mem,
-					                          user_newname);
-					changed = true;
-#ifdef WITH_AUDIT
-					audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-					              "changing member in shadow group",
-					              user_name, AUDIT_NO_ID, 1);
-#endif
-					SYSLOG ((LOG_INFO,
-					         "change '%s' to '%s' in shadow group '%s'",
-					         user_name, user_newname,
-					         nsgrp->sg_name));
-				}
-			} else {
-				/* User was a member but is no more a
-				 * member of this group.
-				 */
-				nsgrp->sg_mem = del_list (nsgrp->sg_mem, user_name);
+			if (lflg) {
+				nsgrp->sg_mem = del_list (nsgrp->sg_mem,
+							  user_name);
+				nsgrp->sg_mem = add_list (nsgrp->sg_mem,
+							  user_newname);
 				changed = true;
 #ifdef WITH_AUDIT
 				audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-				              "removing user from shadow group",
-				              user_name, AUDIT_NO_ID, 1);
+					      "changing member in shadow group",
+					      user_name, AUDIT_NO_ID, 1);
 #endif
 				SYSLOG ((LOG_INFO,
-				         "delete '%s' from shadow group '%s'",
-				         user_name, nsgrp->sg_name));
+					 "change '%s' to '%s' in shadow group '%s'",
+					 user_name, user_newname,
+					 nsgrp->sg_name));
 			}
-		} else if (is_member) {
-			/* User was not a member but is now a member this
-			 * group.
+		} else {
+			/* User was a member but is no more a
+			 * member of this group.
 			 */
-			nsgrp->sg_mem = add_list (nsgrp->sg_mem, user_newname);
+			nsgrp->sg_mem = del_list (nsgrp->sg_mem, user_name);
 			changed = true;
 #ifdef WITH_AUDIT
 			audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
-			              "adding user to shadow group",
-			              user_newname, AUDIT_NO_ID, 1);
+				      "removing user from shadow group",
+				      user_name, AUDIT_NO_ID, 1);
 #endif
-			SYSLOG ((LOG_INFO, "add '%s' to shadow group '%s'",
-			         user_newname, nsgrp->sg_name));
+			SYSLOG ((LOG_INFO,
+				 "delete '%s' from shadow group '%s'",
+				 user_name, nsgrp->sg_name));
 		}
-		if (!changed) {
-			continue;
-		}
-
-		changed = false;
-
-		/*
-		 * Update the group entry to reflect the changes.
+	} else if (is_member) {
+		/* User was not a member but is now a member this
+		 * group.
 		 */
-		if (sgr_update (nsgrp) == 0) {
-			fprintf (stderr,
-			         _("%s: failed to prepare the new %s entry '%s'\n"),
-			         Prog, sgr_dbname (), nsgrp->sg_name);
-			SYSLOG ((LOG_WARN, "failed to prepare the new %s entry '%s'",
-			         sgr_dbname (), nsgrp->sg_name));
-			fail_exit (E_GRP_UPDATE);
-		}
-
-		free (nsgrp);
+		nsgrp->sg_mem = add_list (nsgrp->sg_mem, user_newname);
+		changed = true;
+#ifdef WITH_AUDIT
+		audit_logger (AUDIT_USER_CHAUTHTOK, Prog,
+			      "adding user to shadow group",
+			      user_newname, AUDIT_NO_ID, 1);
+#endif
+		SYSLOG ((LOG_INFO, "add '%s' to shadow group '%s'",
+			 user_newname, nsgrp->sg_name));
 	}
+	if (!changed)
+		goto free_nsgrp;
+
+	/*
+	 * Update the group entry to reflect the changes.
+	 */
+	if (sgr_update (nsgrp) == 0) {
+		fprintf (stderr,
+			 _("%s: failed to prepare the new %s entry '%s'\n"),
+			 Prog, sgr_dbname (), nsgrp->sg_name);
+		SYSLOG ((LOG_WARN, "failed to prepare the new %s entry '%s'",
+			 sgr_dbname (), nsgrp->sg_name));
+		fail_exit (E_GRP_UPDATE);
+	}
+
+free_nsgrp:
+	free (nsgrp);
 }
 #endif				/* SHADOWGRP */
+
 
 /*
  * grp_update - add user to secondary group set
@@ -950,10 +966,10 @@ static void update_gshadow (void)
  */
 static void grp_update (void)
 {
-	update_group ();
+	update_group_file();
 #ifdef SHADOWGRP
 	if (is_shadow_grp) {
-		update_gshadow ();
+		update_gshadow_file();
 	}
 #endif
 }
@@ -967,7 +983,6 @@ static void grp_update (void)
  */
 static void process_flags (int argc, char **argv)
 {
-	const struct group *grp;
 	struct stat st;
 	bool anyflag = false;
 
@@ -978,6 +993,7 @@ static void process_flags (int argc, char **argv)
 		int c;
 		static struct option long_options[] = {
 			{"append",       no_argument,       NULL, 'a'},
+			{"badname",      no_argument,       NULL, 'b'},
 			{"badnames",     no_argument,       NULL, 'b'},
 			{"comment",      required_argument, NULL, 'c'},
 			{"home",         required_argument, NULL, 'd'},
@@ -1000,8 +1016,8 @@ static void process_flags (int argc, char **argv)
 #ifdef ENABLE_SUBIDS
 			{"add-subuids",  required_argument, NULL, 'v'},
 			{"del-subuids",  required_argument, NULL, 'V'},
- 			{"add-subgids",  required_argument, NULL, 'w'},
- 			{"del-subgids",  required_argument, NULL, 'W'},
+			{"add-subgids",  required_argument, NULL, 'w'},
+			{"del-subgids",  required_argument, NULL, 'W'},
 #endif				/* ENABLE_SUBIDS */
 #ifdef WITH_SELINUX
 			{"selinux-user",  required_argument, NULL, 'Z'},
@@ -1062,7 +1078,7 @@ static void process_flags (int argc, char **argv)
 				eflg = true;
 				break;
 			case 'f':
-				if (   (getlong (optarg, &user_newinactive) == 0)
+				if (   (str2sl(&user_newinactive, optarg) == -1)
 				    || (user_newinactive < -1)) {
 					fprintf (stderr,
 					         _("%s: invalid numeric argument '%s'\n"),
@@ -1072,6 +1088,9 @@ static void process_flags (int argc, char **argv)
 				fflg = true;
 				break;
 			case 'g':
+			{
+				struct group  *grp;
+
 				grp = prefix_getgr_nam_gid (optarg);
 				if (NULL == grp) {
 					fprintf (stderr,
@@ -1083,6 +1102,7 @@ static void process_flags (int argc, char **argv)
 				gflg = true;
 				gr_free (grp);
 				break;
+			}
 			case 'G':
 				if (get_groups (optarg) != 0) {
 					exit (E_NOTFOUND);
@@ -1146,7 +1166,7 @@ static void process_flags (int argc, char **argv)
 				sflg = true;
 				break;
 			case 'u':
-				if (   (get_uid (optarg, &user_newid) ==0)
+				if (   (get_uid(optarg, &user_newid) == -1)
 				    || (user_newid == (uid_t)-1)) {
 					fprintf (stderr,
 					         _("%s: invalid user ID '%s'\n"),
@@ -1261,45 +1281,15 @@ static void process_flags (int argc, char **argv)
 		user_newgid = user_gid;
 	}
 	if (prefix[0]) {
-		size_t len = strlen(prefix) + strlen(user_home) + 2;
-		int wlen;
-		prefix_user_home = XMALLOC(len, char);
-		wlen = snprintf(prefix_user_home, len, "%s/%s", prefix, user_home);
-		assert (wlen == (int) len -1);
+		xasprintf(&prefix_user_home, "%s/%s", prefix, user_home);
 		if (user_newhome) {
-			len = strlen(prefix) + strlen(user_newhome) + 2;
-			prefix_user_newhome = XMALLOC(len, char);
-			wlen = snprintf(prefix_user_newhome, len, "%s/%s", prefix, user_newhome);
-			assert (wlen == (int) len -1);
+			xasprintf(&prefix_user_newhome, "%s/%s",
+			          prefix, user_newhome);
 		}
-
-	}
-	else {
+	} else {
 		prefix_user_home = user_home;
 		prefix_user_newhome = user_newhome;
 	}
-
-#ifdef	USE_NIS
-	/*
-	 * Now make sure it isn't an NIS user.
-	 */
-	if (__ispwNIS ()) {
-		char *nis_domain;
-		char *nis_master;
-
-		fprintf (stderr,
-		         _("%s: user %s is a NIS user\n"),
-		         Prog, user_name);
-
-		if (   !yp_get_default_domain (&nis_domain)
-		    && !yp_master (nis_domain, "passwd.byname", &nis_master)) {
-			fprintf (stderr,
-			         _("%s: %s is the NIS master\n"),
-			         Prog, nis_master);
-		}
-		exit (E_NOTFOUND);
-	}
-#endif
 
 	{
 		const struct spwd *spwd = NULL;
@@ -1735,7 +1725,7 @@ static void usr_update (void)
 			 *    a shadowed password
 			 *  + aging information is requested
 			 */
-			memset (&spent, 0, sizeof spent);
+			bzero(&spent, sizeof spent);
 			spent.sp_namp   = user_name;
 
 			/* The user explicitly asked for a shadow feature.
@@ -1940,7 +1930,7 @@ static void update_lastlog (void)
 	    && (read (fd, &ll, sizeof ll) == (ssize_t) sizeof ll)) {
 		/* Copy the old entry to its new location */
 		if (   (lseek (fd, off_newuid, SEEK_SET) != off_newuid)
-		    || (write_full (fd, &ll, sizeof ll) != (ssize_t) sizeof ll)
+		    || (write_full(fd, &ll, sizeof ll) == -1)
 		    || (fsync (fd) != 0)) {
 			fprintf (stderr,
 			         _("%s: failed to copy the lastlog entry of user %lu to user %lu: %s\n"),
@@ -1956,7 +1946,7 @@ static void update_lastlog (void)
 			/* Reset the new uid's lastlog entry */
 			memzero (&ll, sizeof (ll));
 			if (   (lseek (fd, off_newuid, SEEK_SET) != off_newuid)
-			    || (write_full (fd, &ll, sizeof ll) != (ssize_t) sizeof ll)
+			    || (write_full(fd, &ll, sizeof ll) == -1)
 			    || (fsync (fd) != 0)) {
 				fprintf (stderr,
 				         _("%s: failed to copy the lastlog entry of user %lu to user %lu: %s\n"),
@@ -1965,7 +1955,11 @@ static void update_lastlog (void)
 		}
 	}
 
-	(void) close (fd);
+	if (close (fd) != 0 && errno != EINTR) {
+		fprintf (stderr,
+		         _("%s: failed to copy the lastlog entry of user %ju to user %ju: %s\n"),
+		         Prog, (uintmax_t) user_id, (uintmax_t) user_newid, strerror (errno));
+	}
 }
 #endif /* ENABLE_LASTLOG */
 
@@ -2000,7 +1994,7 @@ static void update_faillog (void)
 	    && (read (fd, &fl, sizeof fl) == (ssize_t) sizeof fl)) {
 		/* Copy the old entry to its new location */
 		if (   (lseek (fd, off_newuid, SEEK_SET) != off_newuid)
-		    || (write_full (fd, &fl, sizeof fl) != (ssize_t) sizeof fl)
+		    || (write_full(fd, &fl, sizeof fl) == -1)
 		    || (fsync (fd) != 0)) {
 			fprintf (stderr,
 			         _("%s: failed to copy the faillog entry of user %lu to user %lu: %s\n"),
@@ -2016,7 +2010,8 @@ static void update_faillog (void)
 			/* Reset the new uid's faillog entry */
 			memzero (&fl, sizeof (fl));
 			if (   (lseek (fd, off_newuid, SEEK_SET) != off_newuid)
-			    || (write_full (fd, &fl, sizeof fl) != (ssize_t) sizeof fl)) {
+			    || (write_full(fd, &fl, sizeof fl) == -1))
+			{
 				fprintf (stderr,
 				         _("%s: failed to copy the faillog entry of user %lu to user %lu: %s\n"),
 				         Prog, (unsigned long) user_id, (unsigned long) user_newid, strerror (errno));
@@ -2024,7 +2019,11 @@ static void update_faillog (void)
 		}
 	}
 
-	(void) close (fd);
+	if (close (fd) != 0 && errno != EINTR) {
+		fprintf (stderr,
+		         _("%s: failed to copy the faillog entry of user %ju to user %ju: %s\n"),
+		         Prog, (uintmax_t) user_id, (uintmax_t) user_newid, strerror (errno));
+	}
 }
 
 #ifndef NO_MOVE_MAILBOX
@@ -2037,11 +2036,10 @@ static void update_faillog (void)
  */
 static void move_mailbox (void)
 {
-	const char *maildir;
-	char* mailfile;
-	int fd;
-	struct stat st;
-	size_t size;
+	int          fd;
+	char         *mailfile;
+	const char   *maildir;
+	struct stat  st;
 
 	maildir = getdef_str ("MAIL_DIR");
 #ifdef MAIL_SPOOL_DIR
@@ -2052,8 +2050,6 @@ static void move_mailbox (void)
 	if (NULL == maildir) {
 		return;
 	}
-	size = strlen(prefix) + strlen(maildir) + strlen(user_name) + 3;
-	mailfile = XMALLOC(size, char);
 
 	/*
 	 * O_NONBLOCK is to make sure open won't hang on mandatory locks.
@@ -2062,12 +2058,9 @@ static void move_mailbox (void)
 	 * between stat and chown).  --marekm
 	 */
 	if (prefix[0]) {
-		(void) snprintf (mailfile, size, "%s/%s/%s",
-	    	             prefix, maildir, user_name);
-	}
-	else {
-		(void) snprintf (mailfile, size, "%s/%s",
-	    	             maildir, user_name);
+		xasprintf(&mailfile, "%s/%s/%s", prefix, maildir, user_name);
+	} else {
+		xasprintf(&mailfile, "%s/%s", maildir, user_name);
 	}
 
 	fd = open (mailfile, O_RDONLY | O_NONBLOCK, 0);
@@ -2109,18 +2102,13 @@ static void move_mailbox (void)
 	(void) close (fd);
 
 	if (lflg) {
-		char* newmailfile;
-		size_t newsize;
+		char  *newmailfile;
 
-		newsize = strlen(prefix) + strlen(maildir) + strlen(user_newname) + 3;
-		newmailfile = XMALLOC(newsize, char);
 		if (prefix[0]) {
-			(void) snprintf (newmailfile, newsize, "%s/%s/%s",
-			                 prefix, maildir, user_newname);
-		}
-		else {
-			(void) snprintf (newmailfile, newsize, "%s/%s",
-			                 maildir, user_newname);
+			xasprintf(&newmailfile, "%s/%s/%s",
+			          prefix, maildir, user_newname);
+		} else {
+			xasprintf(&newmailfile, "%s/%s", maildir, user_newname);
 		}
 		if (   (link (mailfile, newmailfile) != 0)
 		    || (unlink (mailfile) != 0)) {
@@ -2169,7 +2157,7 @@ int main (int argc, char **argv)
 #endif
 
 	sys_ngroups = sysconf (_SC_NGROUPS_MAX);
-	user_groups = MALLOC(sys_ngroups + 1, char *);
+	user_groups = XMALLOC(sys_ngroups + 1, char *);
 	user_groups[0] = NULL;
 
 	is_shadow_pwd = spw_file_present ();

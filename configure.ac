@@ -1,12 +1,12 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ([2.69])
-m4_define([libsubid_abi_major], 4)
+m4_define([libsubid_abi_major], 5)
 m4_define([libsubid_abi_minor], 0)
 m4_define([libsubid_abi_micro], 0)
 m4_define([libsubid_abi], [libsubid_abi_major.libsubid_abi_minor.libsubid_abi_micro])
-AC_INIT([shadow], [4.14.7], [pkg-shadow-devel@lists.alioth.debian.org], [],
+AC_INIT([shadow], [4.16.0], [pkg-shadow-devel@lists.alioth.debian.org], [],
 	[https://github.com/shadow-maint/shadow])
-AM_INIT_AUTOMAKE([1.11 foreign dist-xz])
+AM_INIT_AUTOMAKE([1.11 foreign dist-xz subdir-objects tar-pax])
 AC_CONFIG_MACRO_DIRS([m4])
 AM_SILENT_RULES([yes])
 AC_CONFIG_HEADERS([config.h])
@@ -48,7 +48,7 @@ AC_CHECK_HEADER([shadow.h],,[AC_MSG_ERROR([You need a libc with shadow.h])])
 
 AC_CHECK_FUNCS(arc4random_buf futimes \
 	getentropy getrandom getspnam getusershell \
-	initgroups lckpwdf lutimes mempcpy \
+	initgroups lckpwdf lutimes \
 	setgroups updwtmpx innetgr \
 	getspnam_r \
 	rpmatch \
@@ -159,13 +159,6 @@ fi])
 AC_DEFINE_UNQUOTED(PASSWD_PROGRAM, "$shadow_cv_passwd_dir/passwd",
 	[Path to passwd program.])
 
-dnl XXX - quick hack, should disappear before anyone notices :).
-dnl XXX - I just read the above message :).
-if test "$ac_cv_func_ruserok" = "yes"; then
-	AC_DEFINE(RLOGIN, 1, [Define if login should support the -r flag for rlogind.])
-	AC_DEFINE(RUSEROK, 0, [Define to the ruserok() "success" return value (0 or 1).])
-fi
-
 AC_ARG_ENABLE(shadowgrp,
 	[AS_HELP_STRING([--enable-shadowgrp], [enable shadow group support @<:@default=yes@:>@])],
 	[case "${enableval}" in
@@ -240,9 +233,6 @@ AC_ARG_WITH(skey,
 AC_ARG_WITH(tcb,
 	[AS_HELP_STRING([--with-tcb], [use tcb support (incomplete) @<:@default=yes if found@:>@])],
 	[with_tcb=$withval], [with_tcb=maybe])
-AC_ARG_WITH(libcrack,
-	[AS_HELP_STRING([--with-libcrack], [use libcrack @<:@default=no@:>@])],
-	[with_libcrack=$withval], [with_libcrack=no])
 AC_ARG_WITH(sha-crypt,
 	[AS_HELP_STRING([--with-sha-crypt], [allow the SHA256 and SHA512 password encryption algorithms @<:@default=yes@:>@])],
 	[with_sha_crypt=$withval], [with_sha_crypt=yes])
@@ -276,6 +266,7 @@ fi
 AC_DEFINE_UNQUOTED(GROUP_NAME_MAX_LENGTH, $with_group_name_max_length, [max group name length])
 AC_SUBST(GROUP_NAME_MAX_LENGTH)
 GROUP_NAME_MAX_LENGTH="$with_group_name_max_length"
+
 
 AM_CONDITIONAL(USE_SHA_CRYPT, test "x$with_sha_crypt" = "xyes")
 if test "$with_sha_crypt" = "yes"; then
@@ -312,6 +303,10 @@ dnl other libraries.  This should prevent linking libnsl if not really
 dnl needed (Linux glibc, Irix), but still link it if needed (Solaris).
 
 AC_SEARCH_LIBS(gethostbyname, nsl)
+
+PKG_CHECK_MODULES([CMOCKA], [cmocka], [have_cmocka="yes"],
+	[AC_MSG_WARN([libcmocka not found, cmocka tests will not be built])])
+AM_CONDITIONAL([HAVE_CMOCKA], [test x$have_cmocka = xyes])
 
 AC_CHECK_LIB([econf],[econf_readDirs],[LIBECONF="-leconf"],[LIBECONF=""])
 if test -n "$LIBECONF"; then
@@ -431,7 +426,6 @@ if test "$with_libbsd" != "no"; then
 	AC_DEFINE(WITH_LIBBSD, 1, [Build shadow with libbsd support])
 else
 	AC_DEFINE(WITH_LIBBSD, 0, [Build shadow without libbsd support])
-	AC_CHECK_FUNC(strlcpy, [], [AC_MSG_ERROR([strlcpy is required from glibc >= 2.38 or libbsd])])
 fi
 AM_CONDITIONAL(WITH_LIBBSD, test x$with_libbsd = xyes)
 
@@ -517,17 +511,6 @@ if test "$with_audit" != "no"; then
 	else
 		with_audit="no"
 	fi
-fi
-
-AC_SUBST(LIBCRACK)
-if test "$with_libcrack" = "yes"; then
-	echo "checking cracklib flavour, don't be surprised by the results"
-	AC_CHECK_LIB(crack, FascistCheck,
-		[LIBCRACK=-lcrack AC_DEFINE(HAVE_LIBCRACK, 1, [Defined if you have libcrack.])])
-	AC_CHECK_LIB(crack, FascistHistory,
-		AC_DEFINE(HAVE_LIBCRACK_HIST, 1, [Defined if you have the ts&szs cracklib.]))
-	AC_CHECK_LIB(crack, FascistHistoryPw,
-		AC_DEFINE(HAVE_LIBCRACK_PW, 1, [Defined if it includes *Pw functions.]))
 fi
 
 if test "$with_btrfs" != "no"; then
@@ -758,7 +741,7 @@ AC_CONFIG_FILES([
 	etc/Makefile
 	etc/pam.d/Makefile
 	etc/shadow-maint/Makefile
-	shadow.spec
+	tests/unit/Makefile
 ])
 AC_OUTPUT
 
@@ -766,7 +749,6 @@ echo
 echo "shadow will be compiled with the following features:"
 echo
 echo "	auditing support:		$with_audit"
-echo "	CrackLib support:		$with_libcrack"
 echo "	PAM support:			$with_libpam"
 if test "$with_libpam" = "yes"; then
 echo "	suid account management tools:	$enable_acct_tools_setuid"

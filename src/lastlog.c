@@ -22,12 +22,18 @@
 #ifdef HAVE_LL_HOST
 #include <net/if.h>
 #endif
+
+#include "atoi/str2i.h"
 #include "defines.h"
 #include "prototypes.h"
 #include "getdef.h"
+#include "memzero.h"
 /*@-exitarg@*/
 #include "exitcodes.h"
 #include "shadowlog.h"
+#include "string/strftime.h"
+
+
 
 /*
  * Needed for MkLinux DR1/2/2.1 - J.
@@ -119,7 +125,7 @@ static void print_one (/*@null@*/const struct passwd *pw)
 		if (fread (&ll, sizeof (ll), 1, lastlogfile) != 1) {
 			fprintf (stderr,
 			         _("%s: Failed to get the entry for UID %lu\n"),
-			         Prog, (unsigned long int)pw->pw_uid);
+			         Prog, (unsigned long)pw->pw_uid);
 			exit (EXIT_FAILURE);
 		}
 	} else {
@@ -155,7 +161,7 @@ static void print_one (/*@null@*/const struct passwd *pw)
 	if (tm == NULL) {
 		cp = "(unknown)";
 	} else {
-		strftime (ptime, sizeof (ptime), "%a %b %e %H:%M:%S %z %Y", tm);
+		STRFTIME(ptime, "%a %b %e %H:%M:%S %z %Y", tm);
 		cp = ptime;
 	}
 	if (ll.ll_time == (time_t) 0) {
@@ -241,7 +247,7 @@ static void update_one (/*@null@*/const struct passwd *pw)
 	if (fwrite (&ll, sizeof(ll), 1, lastlogfile) != 1) {
 			fprintf (stderr,
 			         _("%s: Failed to update the entry for UID %lu\n"),
-			         Prog, (unsigned long int)pw->pw_uid);
+			         Prog, (unsigned long)pw->pw_uid);
 			exit (EXIT_FAILURE);
 	}
 }
@@ -322,7 +328,7 @@ int main (int argc, char **argv)
 			case 'b':
 			{
 				unsigned long inverse_days;
-				if (getulong (optarg, &inverse_days) == 0) {
+				if (str2ul(&inverse_days, optarg) == -1) {
 					fprintf (stderr,
 					         _("%s: invalid numeric argument '%s'\n"),
 					         Prog, optarg);
@@ -350,7 +356,7 @@ int main (int argc, char **argv)
 			case 't':
 			{
 				unsigned long days;
-				if (getulong (optarg, &days) == 0) {
+				if (str2ul(&days, optarg) == -1) {
 					fprintf (stderr,
 					         _("%s: invalid numeric argument '%s'\n"),
 					         Prog, optarg);
@@ -379,9 +385,9 @@ int main (int argc, char **argv)
 					umax = umin;
 					has_umax = true;
 				} else {
-					if (getrange (optarg,
-					              &umin, &has_umin,
-					              &umax, &has_umax) == 0) {
+					if (getrange(optarg,
+					             &umin, &has_umin,
+					             &umax, &has_umax) == -1) {
 						fprintf (stderr,
 						         _("%s: Unknown user or range: %s\n"),
 						         Prog, optarg);
