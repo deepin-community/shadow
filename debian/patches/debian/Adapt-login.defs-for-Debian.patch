@@ -252,7 +252,7 @@ index 33622c2..91d3ec4 100644
  # home directories.
 -# If HOME_MODE is not set, the value of UMASK is used to create the mode.
 -#HOME_MODE	0700
-+HOME_MODE	0700
++HOME_MODE	0750
  
  #
  # Password aging controls:

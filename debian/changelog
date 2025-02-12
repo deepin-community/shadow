@@ -1,3 +1,9 @@
+shadow (1:4.16.0-7deepin1) unstable; urgency=medium
+
+  * Keep the username directory permission at 750.
+
+ -- lichenggang <lichenggang@deepin.org>  Wed, 12 Feb 2025 16:06:15 +0800
+
 shadow (1:4.16.0-7) unstable; urgency=medium
 
   [ Florent 'Skia' Jacquet ]
