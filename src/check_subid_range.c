@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+#include "atoi/str2i.h"
 #include "defines.h"
 #include "prototypes.h"
 #include "subordinateio.h"
@@ -33,11 +35,10 @@ int main(int argc, char **argv)
 
 	owner = argv[1];
 	check_uids = argv[2][0] == 'u';
-	start = strtoul(argv[3], NULL, 10);
-	if (start == ULONG_MAX && errno == ERANGE)
+	errno = 0;
+	if (str2ul(&start, argv[3]) == -1)
 		exit(1);
-	count = strtoul(argv[4], NULL, 10);
-	if (count == ULONG_MAX && errno == ERANGE)
+	if (str2ul(&count, argv[4]) == -1)
 		exit(1);
 	if (check_uids) {
 		if (have_sub_uids(owner, start, count))

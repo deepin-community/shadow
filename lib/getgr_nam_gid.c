@@ -23,18 +23,18 @@
  */
 extern /*@only@*//*@null@*/struct group *getgr_nam_gid (/*@null@*/const char *grname)
 {
-	long long int gid;
-	char *endptr;
+	char       *end;
+	long long  gid;
 
 	if (NULL == grname) {
 		return NULL;
 	}
 
 	errno = 0;
-	gid = strtoll (grname, &endptr, 10);
+	gid = strtoll(grname, &end, 10);
 	if (   ('\0' != *grname)
-	    && ('\0' == *endptr)
-	    && (ERANGE != errno)
+	    && ('\0' == *end)
+	    && (0 == errno)
 	    && (/*@+longintegral@*/gid == (gid_t)gid)/*@=longintegral@*/) {
 		return xgetgrgid (gid);
 	}

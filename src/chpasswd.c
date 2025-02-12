@@ -16,9 +16,11 @@
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #ifdef USE_PAM
 #include "pam_defs.h"
 #endif				/* USE_PAM */
+#include "atoi/str2i.h"
 #include "defines.h"
 #include "nscd.h"
 #include "sssd.h"
@@ -29,6 +31,7 @@
 /*@-exitarg@*/
 #include "exitcodes.h"
 #include "shadowlog.h"
+
 
 #define IS_CRYPT_METHOD(str) ((crypt_method != NULL && strcmp(crypt_method, str) == 0) ? true : false)
 
@@ -61,7 +64,7 @@ static bool pw_locked = false;
 static bool spw_locked = false;
 
 /* local function prototypes */
-static void fail_exit (int code);
+NORETURN static void fail_exit (int code);
 NORETURN static void usage (int status);
 static void process_flags (int argc, char **argv);
 static void check_flags (void);
@@ -190,19 +193,19 @@ static void process_flags (int argc, char **argv)
                         bad_s = 0;
 #if defined(USE_SHA_CRYPT)
 			if ((IS_CRYPT_METHOD("SHA256") || IS_CRYPT_METHOD("SHA512"))
-			    && (0 == getlong(optarg, &sha_rounds))) {
+			    && (-1 == str2sl(&sha_rounds, optarg))) {
                             bad_s = 1;
                         }
 #endif				/* USE_SHA_CRYPT */
 #if defined(USE_BCRYPT)
                         if (IS_CRYPT_METHOD("BCRYPT")
-			    && (0 == getlong(optarg, &bcrypt_rounds))) {
+			    && (-1 == str2sl(&bcrypt_rounds, optarg))) {
                             bad_s = 1;
                         }
 #endif				/* USE_BCRYPT */
 #if defined(USE_YESCRYPT)
                         if (IS_CRYPT_METHOD("YESCRYPT")
-			    && (0 == getlong(optarg, &yescrypt_cost))) {
+			    && (-1 == str2sl(&yescrypt_cost, optarg))) {
                             bad_s = 1;
                         }
 #endif				/* USE_YESCRYPT */

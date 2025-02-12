@@ -29,6 +29,11 @@
 #include "getdef.h"
 #include "shadowlog.h"
 #include <sys/resource.h>
+
+#include "atoi/str2i.h"
+#include "memzero.h"
+
+
 #ifndef LIMITS_FILE
 #define LIMITS_FILE "/etc/limits"
 #endif
@@ -44,8 +49,10 @@ static int setrlimit_value (unsigned int resource,
                             const char *value,
                             unsigned int multiplier)
 {
-	struct rlimit rlim;
-	rlim_t limit;
+	char           *end;
+	long           l;
+	rlim_t         limit;
+	struct rlimit  rlim;
 
 	/* The "-" is special, not belonging to a strange negative limit.
 	 * It is infinity, in a controlled way.
@@ -54,23 +61,18 @@ static int setrlimit_value (unsigned int resource,
 		limit = RLIM_INFINITY;
 	}
 	else {
-		/* We cannot use getlong here because it fails when there
+		/* We cannot use str2sl() here because it fails when there
 		 * is more to the value than just this number!
 		 * Also, we are limited to base 10 here (hex numbers will not
 		 * work with the limit string parser as is anyway)
 		 */
-		char *endptr;
-		long longlimit = strtol (value, &endptr, 10);
-		if ((0 == longlimit) && (value == endptr)) {
-			/* No argument at all. No-op.
-			 * FIXME: We could instead throw an error, though.
-			 */
-			return 0;
-		}
-		longlimit *= multiplier;
-		limit = longlimit;
-		if (longlimit != limit)
-		{
+		errno = 0;
+		l = strtol(value, &end, 10);
+
+		if (value == end || errno != 0)
+			return 0;  // FIXME: We could instead throw an error, though.
+
+		if (__builtin_mul_overflow(l, multiplier, &limit)) {
 			/* FIXME: Again, silent error handling...
 			 * Wouldn't screaming make more sense?
 			 */
@@ -91,7 +93,7 @@ static int set_prio (const char *value)
 {
 	long prio;
 
-	if (   (getlong (value, &prio) == 0)
+	if (   (str2sl(&prio, value) == -1)
 	    || (prio != (int) prio)) {
 		return 0;
 	}
@@ -104,9 +106,9 @@ static int set_prio (const char *value)
 
 static int set_umask (const char *value)
 {
-	unsigned long int mask;
+	unsigned long  mask;
 
-	if (   (getulong (value, &mask) == 0)
+	if (   (str2ul(&mask, value) == -1)
 	    || (mask != (mode_t) mask)) {
 		return 0;
 	}
@@ -121,7 +123,7 @@ static int check_logins (const char *name, const char *maxlogins)
 {
 	unsigned long limit, count;
 
-	if (getulong (maxlogins, &limit) == 0) {
+	if (str2ul(&limit, maxlogins) == -1) {
 		return 0;
 	}
 
@@ -356,11 +358,11 @@ static int setup_user_limits (const char *uname)
 	char tempbuf[1024];
 
 	/* init things */
-	memzero (buf, sizeof (buf));
-	memzero (name, sizeof (name));
-	memzero (limits, sizeof (limits));
-	memzero (deflimits, sizeof (deflimits));
-	memzero (tempbuf, sizeof (tempbuf));
+	MEMZERO(buf);
+	MEMZERO(name);
+	MEMZERO(limits);
+	MEMZERO(deflimits);
+	MEMZERO(tempbuf);
 
 	/* start the checks */
 	fil = fopen (LIMITS_FILE, "r");
@@ -377,7 +379,7 @@ static int setup_user_limits (const char *uname)
 		if (('#' == buf[0]) || ('\n' == buf[0])) {
 			continue;
 		}
-		memzero (tempbuf, sizeof (tempbuf));
+		MEMZERO(tempbuf);
 		/* a valid line should have a username, then spaces,
 		 * then limits
 		 * we allow the format:
@@ -482,8 +484,9 @@ void setup_limits (const struct passwd *info)
 			}
 
 			if (strncmp (cp, "pri=", 4) == 0) {
-				long int inc;
-				if (   (getlong (cp + 4, &inc) == 1)
+				long  inc;
+
+				if (   (str2sl(&inc, cp + 4) == 0)
 				    && (inc >= -20) && (inc <= 20)) {
 					errno = 0;
 					if (   (nice (inc) != -1)
@@ -500,8 +503,8 @@ void setup_limits (const struct passwd *info)
 				continue;
 			}
 			if (strncmp (cp, "ulimit=", 7) == 0) {
-				long int blocks;
-				if (   (getlong (cp + 7, &blocks) == 0)
+				long  blocks;
+				if (   (str2sl(&blocks, cp + 7) == -1)
 				    || (blocks != (int) blocks)
 				    || (set_filesize_limit (blocks) != 0)) {
 					SYSLOG ((LOG_WARN,
@@ -511,8 +514,9 @@ void setup_limits (const struct passwd *info)
 				continue;
 			}
 			if (strncmp (cp, "umask=", 6) == 0) {
-				unsigned long int mask;
-				if (   (getulong (cp + 6, &mask) == 0)
+				unsigned long  mask;
+
+				if (   (str2ul(&mask, cp + 6) == -1)
 				    || (mask != (mode_t) mask)) {
 					SYSLOG ((LOG_WARN,
 					         "Can't set umask value for user %s",

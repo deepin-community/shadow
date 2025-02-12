@@ -1,0 +1,27 @@
+From: Pino Toscano <toscano.pino@tiscali.it>
+Date: Tue, 10 Sep 2024 14:36:49 +0200
+Subject: [PATCH] lib/user_busy.c: Include <utmpx.h>
+
+Since:
+- utmpx APIs are used in non-Linux code blocks
+- <utmpx.h> is already unconditionally included in Linux parts in other
+  files
+then unconditionally include it in this file as well.
+
+Signed-off-by: Pino Toscano <toscano.pino@tiscali.it>
+---
+ lib/user_busy.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/user_busy.c b/lib/user_busy.c
+index a622376..b559405 100644
+--- a/lib/user_busy.c
++++ b/lib/user_busy.c
+@@ -17,6 +17,7 @@
+ #include <dirent.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#include <utmpx.h>
+ #include "defines.h"
+ #include "prototypes.h"
+ #ifdef ENABLE_SUBIDS
