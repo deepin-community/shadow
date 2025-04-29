@@ -1,3 +1,9 @@
+shadow (1:4.16.0-8deepin1) unstable; urgency=medium
+
+  * 新增uid和用户名唯一功能，系统整个生命周期内，uid或者用户名唯一，默认开启uid唯一，默认不开启用户名唯一。通过/etc/login.defs中添加配置 "CHECK_USED_USER" 开启(yes)或关闭(no) uid唯一功能，通过配置 "CHECK_USED_USER_NAME" 控制用户名唯一功能的开关
+
+ -- luojiahao <luojiahao@uniontech.com>  Tue, 29 Apr 2025 10:43:16 +0800
+
 shadow (1:4.16.0-7deepin1) unstable; urgency=medium
 
   * Keep the username directory permission at 750.
