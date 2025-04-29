@@ -1,0 +1,586 @@
+Index: shadow/configure.ac
+===================================================================
+--- shadow.orig/configure.ac
++++ shadow/configure.ac
+@@ -707,6 +707,8 @@ AM_GNU_GETTEXT_VERSION([0.19])
+ AM_GNU_GETTEXT([external], [need-ngettext])
+ AM_CONDITIONAL(USE_NLS, test "x$USE_NLS" = "xyes")
+ 
++AC_DEFINE(UOS_CHECK_USED_USER, 1, [Define to support uos check used user.])
++
+ AC_CONFIG_FILES([
+ 	Makefile
+ 	po/Makefile.in
+Index: shadow/lib/getdef.c
+===================================================================
+--- shadow.orig/lib/getdef.c
++++ shadow/lib/getdef.c
+@@ -145,6 +145,10 @@ static struct itemdef def_table[] = {
+ 	{"TCB_SYMLINKS", NULL},
+ 	{"USE_TCB", NULL},
+ #endif
++#ifdef UOS_CHECK_USED_USER
++	{"CHECK_USED_USER", NULL},
++	{"CHECK_USED_USER_NAME", NULL},
++#endif
+ 	{"FORCE_SHADOW", NULL},
+ 	{"GRANT_AUX_GROUP_SUBIDS", NULL},
+ 	{"PREVENT_NO_AUTH", NULL},
+Index: shadow/lib/find_new_uid.c
+===================================================================
+--- shadow.orig/lib/find_new_uid.c
++++ shadow/lib/find_new_uid.c
+@@ -18,6 +18,10 @@
+ #include "getdef.h"
+ #include "shadowlog.h"
+ 
++#ifdef UOS_CHECK_USED_USER
++#include "uos_user_check.h"
++#endif
++
+ /*
+  * get_ranges - Get the minimum and maximum ID ranges for the search
+  *
+@@ -269,6 +273,14 @@ int find_new_uid(bool sys_user,
+ 		}
+ 	}
+ 
++#ifdef UOS_CHECK_USED_USER
++	/*
++	* create index of used UIDs throughout the system's whole life cycle
++	* added by jianghaoa@uniontech.com
++	*/
++	uos_set_used_uids(used_uids, uid_max);
++#endif
++
+ 	if (sys_user) {
+ 		/*
+ 		 * For system users, we want to start from the
+Index: shadow/lib/defines.h
+===================================================================
+--- shadow.orig/lib/defines.h
++++ shadow/lib/defines.h
+@@ -213,4 +213,21 @@
+ #define PASS_MAX  BUFSIZ - 1
+ #endif
+ 
++/* Maximum length of usernames */
++#ifdef HAVE_UTMPX_H
++# include <utmpx.h>
++# define USER_NAME_MAX_LENGTH (sizeof (((struct utmpx *)NULL)->ut_user))
++#else
++# include <utmp.h>
++# ifdef HAVE_STRUCT_UTMP_UT_USER
++#  define USER_NAME_MAX_LENGTH (sizeof (((struct utmp *)NULL)->ut_user))
++# else
++#  ifdef HAVE_STRUCT_UTMP_UT_NAME
++#   define USER_NAME_MAX_LENGTH (sizeof (((struct utmp *)NULL)->ut_name))
++#  else
++#   define USER_NAME_MAX_LENGTH 32
++#  endif
++# endif
++#endif
++
+ #endif				/* _DEFINES_H_ */
+Index: shadow/lib/uos_user_check.h
+===================================================================
+--- /dev/null
++++ shadow/lib/uos_user_check.h
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (c) 2021       , UnionTech Software Technology Co., Ltd.
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. The name of the copyright holders or contributors may not be used to
++ *    endorse or promote products derived from this software without
++ *    specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
++ * PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT
++ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++#ifndef _UOS_USER_CHECK_H
++#define _UOS_USER_CHECK_H
++#include "defines.h"
++#include <unistd.h>
++
++/* uos_user_check.c */
++extern void uos_add_user(char *uname, uid_t uid);
++extern void uos_set_used_uids(bool *used_uids, uid_t max_uid);
++
++#endif				/* _UOS_USER_CHECK_H */
+Index: shadow/lib/uos_user_check.c
+===================================================================
+--- /dev/null
++++ shadow/lib/uos_user_check.c
+@@ -0,0 +1,368 @@
++/*
++ * Copyright (c) 2021       , UnionTech Software Technology Co., Ltd.
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. The name of the copyright holders or contributors may not be used to
++ *    endorse or promote products derived from this software without
++ *    specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
++ * PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT
++ * HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <config.h>
++#ident "$Id$"
++
++#include <fcntl.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <sys/stat.h>
++
++#include "defines.h"  /* bool,  USER_NAME_MAX_LENGTH */
++#include "getdef.h"  /* getdef_bool and getdef_ulong */
++
++#define UOS_UNAME_PATH "/etc/.uname_data"
++#define UOS_UID_PATH "/etc/.uid_data"
++#define UOS_READ_BUFF_SIZE 32
++
++typedef struct uos_user_uid_data {
++        uid_t u_id;
++} uos_uid_data;
++
++typedef struct uos_user_uname_data {
++        char u_name[USER_NAME_MAX_LENGTH];
++} uos_uname_data;
++
++int uos_check_flag = 0;
++int uos_check_name_flag = 0;
++
++static int uos_check_used_user_enable()
++{
++	uos_check_flag = getdef_bool ("CHECK_USED_USER") ? 1 : 0;
++    return uos_check_flag;
++}
++
++static int uos_check_used_name_enable()
++{
++	uos_check_name_flag = getdef_bool ("CHECK_USED_USER_NAME") ? 1 : 0;
++    return uos_check_name_flag;
++}
++
++static void check_used_uid(uid_t uid)
++{
++    FILE *fp = NULL;
++    int total_data_num = 0;
++    int read_count = 0;
++    int fread_num = 0;
++    struct stat statbuf;
++    const char *file_path = UOS_UID_PATH;
++    uos_uid_data *ucontent;
++    int data_size = sizeof(*ucontent);
++    int buff_size = UOS_READ_BUFF_SIZE * data_size;
++
++    if (uid == 0)
++        return;
++
++    if (!stat(file_path, &statbuf)) {
++        total_data_num = statbuf.st_size / data_size;
++        if(total_data_num == 0)
++            return;
++    } else
++        return;
++
++    fp = fopen(file_path, "r");
++    if (fp == NULL)
++        return;
++
++    ucontent = (uos_uid_data *)malloc(buff_size);
++    if (ucontent == NULL) {
++        fprintf(stderr, "memory alloc error!\n");
++        fclose(fp);
++        exit(0);
++    }
++
++    // Read UOS_READ_BUFF_SIZE data structs at a time, read read_count times
++    read_count = total_data_num / UOS_READ_BUFF_SIZE + 1;
++
++    for (int j = 0; j < read_count; j++) {
++        memset(ucontent, 0, buff_size);
++        fread_num = fread(ucontent, data_size, UOS_READ_BUFF_SIZE, fp);
++        if (fread_num <= 0)
++            break;
++
++        for(int i = 0; i < fread_num; i++) {
++            if(uid == (ucontent + i)->u_id) {
++                fprintf(stderr, "uid %d has been used \n", uid);
++                free(ucontent);
++                fclose(fp);
++                exit(0);
++            }
++        }
++    }
++
++    free(ucontent);
++    fclose(fp);
++
++    return;
++}
++
++static void uos_add_user_uid(uid_t uid)
++{
++    FILE *fp = NULL;
++    struct stat statbuf;
++    const char *file_path = UOS_UID_PATH;
++    uos_uid_data *ucontent;
++    int data_size = sizeof(*ucontent);
++
++    if (uid == 0)
++        return;
++
++    ucontent = (uos_uid_data *)calloc(1, data_size);
++    if (ucontent == NULL) {
++        fprintf(stderr, "memory malloc error!\n");
++        exit(0);
++    }
++    ucontent->u_id = uid;
++
++    fp = fopen(file_path, "a+");
++    if(fp == NULL) {
++        free(ucontent);
++        goto err;
++    }
++
++    int ret = fwrite(ucontent, data_size, 1, fp);
++    if (ret <= 0) {
++        free(ucontent);
++        fclose(fp);
++        goto err;
++    }
++
++    fclose(fp);
++    free(ucontent);
++    return;
++
++err:
++    if (uos_check_flag == 1) {
++        fprintf(stderr, "security warning: update used-user database error!\n");
++        exit(0);
++    }
++    return;
++}
++
++static void check_used_name(const char *uname)
++{
++    FILE *fp = NULL;
++    int read_count = 0;
++    int total_data_num = 0;
++    int fread_num = 0;
++    struct stat statbuf;
++    const char *file_path = UOS_UNAME_PATH;
++    uos_uname_data *ucontent;
++    int data_size = sizeof(*ucontent);
++    int buff_size = UOS_READ_BUFF_SIZE * data_size;
++
++    if (uname == NULL)
++        return;
++
++    if (!stat(file_path, &statbuf)) {
++        total_data_num = statbuf.st_size / data_size;
++        if(total_data_num == 0)
++            return;
++    } else
++        return;
++
++    fp = fopen(file_path, "r");
++    if (fp == NULL)
++        return;
++
++    ucontent = (uos_uname_data *)malloc(buff_size);
++    if (ucontent == NULL) {
++        fprintf(stderr, "memory alloc error!\n");
++        fclose(fp);
++        exit(0);
++    }
++
++    // Read UOS_READ_BUFF_SIZE data structs at a time, read read_count times
++    read_count = total_data_num / UOS_READ_BUFF_SIZE + 1;
++
++    for (int j = 0; j < read_count; j++) {
++        memset(ucontent, 0, buff_size);
++        fread_num = fread(ucontent, data_size, UOS_READ_BUFF_SIZE, fp);
++        if (fread_num <= 0)
++            break;
++
++        for(int i = 0; i < fread_num; i++) {
++            if(!strcmp(uname, (ucontent + i)->u_name)) {
++                fprintf(stderr, "user %s has been used \n", uname);
++                free(ucontent);
++                fclose(fp);
++                exit(0);
++            }
++        }
++    }
++
++    free(ucontent);
++    fclose(fp);
++
++    return;
++}
++
++static void uos_add_user_name(const char *uname)
++{
++    FILE *fp = NULL;
++    struct stat statbuf;
++    const char *file_path = UOS_UNAME_PATH;
++    uos_uname_data *ucontent;
++    int data_size = sizeof(*ucontent);
++
++    if (uname == NULL)
++        return;
++
++    ucontent = (uos_uname_data *)calloc(1, data_size);
++    if (ucontent == NULL) {
++        fprintf(stderr, "memory malloc error!\n");
++        exit(0);
++    }
++    memcpy(ucontent->u_name, uname, strlen(uname));
++
++    fp = fopen(file_path, "a+");
++    if(fp == NULL) {
++        free(ucontent);
++        goto err;
++    }
++
++    int ret = fwrite(ucontent, data_size, 1, fp);
++    if (ret <= 0) {
++        free(ucontent);
++        fclose(fp);
++        goto err;
++    }
++
++    fclose(fp);
++    free(ucontent);
++    return;
++
++err:
++    if (uos_check_flag == 1) {
++        fprintf(stderr, "security warning: update used-user database error!\n");
++        exit(0);
++    }
++    return;
++}
++
++#ifdef UOS_CHECK_USED_USER
++void uos_add_user(char *uname, uid_t uid)
++{
++    FILE *fp = NULL;
++    int check_flag = uos_check_used_user_enable();
++    int check_name_flag = uos_check_used_name_enable();
++    uid_t uid_min = (uid_t) getdef_ulong ("UID_MIN", 1000UL);
++    int add_user_flag = 0;
++
++	/* add user only if UID greater than UID_MIN */
++    if (uid >= uid_min)
++		add_user_flag = 1;
++
++    if (uid && check_flag == 1)
++       check_used_uid(uid);
++
++    if (uname && check_flag == 1 && check_name_flag == 1)
++        check_used_name(uname);
++
++    if (add_user_flag) {
++        uos_add_user_uid(uid);
++        uos_add_user_name(uname);
++    }
++    return;
++}
++
++void uos_set_used_uids(bool *used_uids, uid_t max_uid)
++{
++    FILE *fp = NULL;
++    int total_data_num = 0;
++    int read_count = 0;
++    int fread_num = 0;
++    const char *file_path = UOS_UID_PATH;
++    struct stat statbuf;
++    uos_uid_data *ucontent;
++    int data_size = sizeof(*ucontent);
++    int buff_size = UOS_READ_BUFF_SIZE * data_size;
++    uid_t uid = 0;
++
++    if (!uos_check_used_user_enable())
++        return;
++
++    if (used_uids == NULL)
++        return;
++
++    if (!stat(file_path, &statbuf)) {
++        total_data_num = statbuf.st_size / data_size;
++        if(total_data_num == 0)
++            return;
++    } else
++        return;
++
++    fp = fopen(file_path, "r");
++    if (fp == NULL)
++        return;
++
++    ucontent = (uos_uid_data *)malloc(buff_size);
++    if (ucontent == NULL) {
++        fprintf(stderr, "memory alloc error!\n");
++        fclose(fp);
++        exit(0);
++    }
++
++    // Read UOS_READ_BUFF_SIZE data structs at a time, read read_count times
++    read_count = total_data_num / UOS_READ_BUFF_SIZE + 1;
++
++    for (int j = 0; j < read_count; j++) {
++        memset(ucontent, 0, buff_size);
++        fread_num = fread(ucontent, data_size, UOS_READ_BUFF_SIZE, fp);
++        if (fread_num <= 0)
++            break;
++
++        for(int i = 0; i < fread_num; i++) {
++            uid = (ucontent + i)->u_id;
++            if (uid <= max_uid)
++                used_uids[uid] = true;
++        }
++    }
++
++    free(ucontent);
++    fclose(fp);
++
++    return;
++}
++
++#else
++void uos_add_user(char *uname, uid_t uid)
++{
++    return;
++}
++
++void uos_set_used_uids(bool *used_uids, uid_t max_uid)
++{
++    return;
++}
++
++#endif
+\ No newline at end of file
+Index: shadow/lib/Makefile.am
+===================================================================
+--- shadow.orig/lib/Makefile.am
++++ shadow/lib/Makefile.am
+@@ -175,7 +175,9 @@ libshadow_la_SOURCES = \
+ 	xgetgrnam.c \
+ 	xgetgrgid.c \
+ 	xgetspnam.c \
+-	yesno.c
++	yesno.c \
++	uos_user_check.c \
++	uos_user_check.h
+ 
+ if WITH_TCB
+ libshadow_la_SOURCES += tcbfuncs.c tcbfuncs.h
+Index: shadow/src/useradd.c
+===================================================================
+--- shadow.orig/src/useradd.c
++++ shadow/src/useradd.c
+@@ -2615,6 +2615,14 @@ int main (int argc, char **argv)
+ 	 */
+ 	open_files ();
+ 
++#ifdef UOS_CHECK_USED_USER
++	/* never allow repeated uid */
++	if (oflg == 1) {
++		oflg = 0;
++		printf("uid must be unique!so, the specified option \'-o\' will be ignored\n");
++	}
++#endif
++
+ 	if (!oflg) {
+ 		/* first, seek for a valid uid to use for this user.
+ 		 * We do this because later we can use the uid we found as
+@@ -2642,6 +2650,12 @@ int main (int argc, char **argv)
+ 
+ 	if (uflg)
+ 	   check_uid_range(rflg,user_id);
++
++#ifdef UOS_CHECK_USED_USER
++	if (!rflg)
++		uos_add_user(user_name, user_id);
++#endif
++
+ #ifdef WITH_TCB
+ 	if (getdef_bool ("USE_TCB")) {
+ 		if (shadowtcb_create (user_name, user_id) == SHADOWTCB_FAILURE) {
+Index: shadow/src/usermod.c
+===================================================================
+--- shadow.orig/src/usermod.c
++++ shadow/src/usermod.c
+@@ -2171,6 +2171,19 @@ int main (int argc, char **argv)
+ 
+ 	process_flags (argc, argv);
+ 
++#ifdef UOS_CHECK_USED_USER
++	int newid_tmp = 0;
++	char *newname_tmp = NULL;
++	// if specify new user ID
++	if (uflg == true)
++		newid_tmp = user_newid;
++	// if specify new user name
++	if (lflg == true)
++		newname_tmp = user_newname;
++
++	uos_add_user(newname_tmp, newid_tmp);
++#endif
++
+ 	/*
+ 	 * The home directory, the username and the user's UID should not
+ 	 * be changed while the user is logged in.
+Index: shadow/etc/login.defs
+===================================================================
+--- shadow.orig/etc/login.defs
++++ shadow/etc/login.defs
+@@ -190,3 +190,8 @@ NONEXISTENT	/nonexistent
+ # Debian.
+ #
+ USERGROUPS_ENAB yes
++
++#
++# check used user and uid before useradd or usermod
++#
++CHECK_USED_USER yes
+\ No newline at end of file
