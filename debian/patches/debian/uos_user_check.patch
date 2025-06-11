@@ -2,11 +2,13 @@ Index: shadow/configure.ac
 ===================================================================
 --- shadow.orig/configure.ac
 +++ shadow/configure.ac
-@@ -707,6 +707,8 @@ AM_GNU_GETTEXT_VERSION([0.19])
+@@ -707,6 +707,10 @@ AM_GNU_GETTEXT_VERSION([0.19])
  AM_GNU_GETTEXT([external], [need-ngettext])
  AM_CONDITIONAL(USE_NLS, test "x$USE_NLS" = "xyes")
  
 +AC_DEFINE(UOS_CHECK_USED_USER, 1, [Define to support uos check used user.])
++AC_DEFINE_UNQUOTED(UOS_USED_UID_PATH, "/var/lib/deepin/passwd/.used_uname", [Path for used uid])
++AC_DEFINE_UNQUOTED(UOS_USED_UNAME_PATH, "/var/lib/deepin/passwd/.used_uid", [Path for used uanme])
 +
  AC_CONFIG_FILES([
  	Makefile
@@ -129,7 +131,7 @@ Index: shadow/lib/uos_user_check.c
 ===================================================================
 --- /dev/null
 +++ shadow/lib/uos_user_check.c
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,366 @@
 +/*
 + * Copyright (c) 2021       , UnionTech Software Technology Co., Ltd.
 + * All rights reserved.
@@ -172,8 +174,6 @@ Index: shadow/lib/uos_user_check.c
 +#include "defines.h"  /* bool,  USER_NAME_MAX_LENGTH */
 +#include "getdef.h"  /* getdef_bool and getdef_ulong */
 +
-+#define UOS_UNAME_PATH "/etc/.uname_data"
-+#define UOS_UID_PATH "/etc/.uid_data"
 +#define UOS_READ_BUFF_SIZE 32
 +
 +typedef struct uos_user_uid_data {
@@ -206,7 +206,7 @@ Index: shadow/lib/uos_user_check.c
 +    int read_count = 0;
 +    int fread_num = 0;
 +    struct stat statbuf;
-+    const char *file_path = UOS_UID_PATH;
++    const char *file_path = UOS_USED_UID_PATH;
 +    uos_uid_data *ucontent;
 +    int data_size = sizeof(*ucontent);
 +    int buff_size = UOS_READ_BUFF_SIZE * data_size;
@@ -261,7 +261,7 @@ Index: shadow/lib/uos_user_check.c
 +{
 +    FILE *fp = NULL;
 +    struct stat statbuf;
-+    const char *file_path = UOS_UID_PATH;
++    const char *file_path = UOS_USED_UID_PATH;
 +    uos_uid_data *ucontent;
 +    int data_size = sizeof(*ucontent);
 +
@@ -307,7 +307,7 @@ Index: shadow/lib/uos_user_check.c
 +    int total_data_num = 0;
 +    int fread_num = 0;
 +    struct stat statbuf;
-+    const char *file_path = UOS_UNAME_PATH;
++    const char *file_path = UOS_USED_UNAME_PATH;
 +    uos_uname_data *ucontent;
 +    int data_size = sizeof(*ucontent);
 +    int buff_size = UOS_READ_BUFF_SIZE * data_size;
@@ -362,7 +362,7 @@ Index: shadow/lib/uos_user_check.c
 +{
 +    FILE *fp = NULL;
 +    struct stat statbuf;
-+    const char *file_path = UOS_UNAME_PATH;
++    const char *file_path = UOS_USED_UNAME_PATH;
 +    uos_uname_data *ucontent;
 +    int data_size = sizeof(*ucontent);
 +
@@ -433,7 +433,7 @@ Index: shadow/lib/uos_user_check.c
 +    int total_data_num = 0;
 +    int read_count = 0;
 +    int fread_num = 0;
-+    const char *file_path = UOS_UID_PATH;
++    const char *file_path = UOS_USED_UID_PATH;
 +    struct stat statbuf;
 +    uos_uid_data *ucontent;
 +    int data_size = sizeof(*ucontent);
@@ -583,4 +583,13 @@ Index: shadow/etc/login.defs
 +# check used user and uid before useradd or usermod
 +#
 +CHECK_USED_USER yes
+\ No newline at end of file
+Index: shadow/debian/passwd.dirs
+===================================================================
+--- shadow.orig/debian/passwd.dirs
++++ shadow/debian/passwd.dirs
+@@ -1,2 +1,3 @@
+ etc/default
+ usr/share/lintian/overrides
++var/lib/deepin/passwd
 \ No newline at end of file
