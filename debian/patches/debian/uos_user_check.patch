@@ -172,8 +172,8 @@ Index: shadow/lib/uos_user_check.c
 +#include "defines.h"  /* bool,  USER_NAME_MAX_LENGTH */
 +#include "getdef.h"  /* getdef_bool and getdef_ulong */
 +
-+#define UOS_UNAME_PATH "/etc/.uname_data"
-+#define UOS_UID_PATH "/etc/.uid_data"
++#define UOS_UNAME_PATH "/var/log/.uname_data"
++#define UOS_UID_PATH "/var/log/.uid_data"
 +#define UOS_READ_BUFF_SIZE 32
 +
 +typedef struct uos_user_uid_data {
