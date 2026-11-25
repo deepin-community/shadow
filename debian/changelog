@@ -1,3 +1,14 @@
+shadow (1:4.16.0-7deepin4) unstable; urgency=medium
+
+  * fix(cve): CVE-2026-135901 (unknown) - lib/idmapping.c,
+    src/newidmap.c: Use openat2(2) for safety   Upstream:
+    https://github.com/shadow-
+    maint/shadow/commit/1112ed7e741d4db15272d0fee910a5c3360c3457,https:/
+    /github.com/shadow-
+    maint/shadow/commit/ce55bdb26c42939b4c71068f92d83efe72bd64e4
+
+ -- deepin-ci-robot <packages@deepin.org>  Wed, 25 Nov 2026 11:05:18 +0800
+
 shadow (1:4.16.0-7deepin3) unstable; urgency=medium
 
   * Rebuild with LTO enabled (dpkg vendor feature optimize/lto).
